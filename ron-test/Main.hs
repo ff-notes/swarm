@@ -8,9 +8,10 @@ import           RON.Internal.Prelude
 
 import           Control.Monad.Except (runExceptT)
 import           Control.Monad.State.Strict (evalStateT, get)
+import           Data.ByteString (unpack)
 import           Data.ByteString.Lazy (fromStrict)
 import qualified Data.ByteString.Lazy.Char8 as BSL
-import           Data.Char (toLower, toUpper)
+import           Data.Char (ord, toLower, toUpper)
 import           Data.Foldable (for_)
 import           Data.Maybe (fromJust)
 import           GHC.Stack (HasCallStack, withFrozenCallStack)
@@ -294,11 +295,9 @@ prop_RGA_delete_deleted = let
             , ["."]
             ]
 
-prop_base64_isLetter =
-    let alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~" :: String
-    in property $ do
-        c <- forAll Gen.unicodeAll
-        (c `elem` alphabet) === Base64.isLetter c
+prop_base64_isLetter = property $ do
+        c <- fromIntegral . ord <$> forAll Gen.ascii
+        (c `elem` unpack Base64.alphabet) === Base64.isLetter c
 
 data ShowAs a = ShowAs a String
 

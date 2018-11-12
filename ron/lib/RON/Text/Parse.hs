@@ -26,6 +26,7 @@ import           Attoparsec.Extra (Parser, char, endOfInputEx, isSuccessful,
                                    label, manyTill, parseOnlyL, satisfy, (<+>),
                                    (??))
 import qualified Data.Aeson as Json
+import qualified Data.Attoparsec.ByteString as ABS
 import           Data.Attoparsec.ByteString.Char8 (anyChar, decimal, double,
                                                    signed, skipSpace, takeWhile,
                                                    takeWhile1)
@@ -274,7 +275,7 @@ uuid22 = label "UUID-Base64-double-word" $ do
 
 base64word :: Int -> Parser ByteString
 base64word maxSize = label "Base64 word" $ do
-    word <- takeWhile1 Base64.isLetter
+    word <- ABS.takeWhile1 Base64.isLetter
     guard $ BS.length word <= maxSize
     pure word
 

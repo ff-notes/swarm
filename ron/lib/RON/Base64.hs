@@ -4,7 +4,8 @@
 
 -- | RON version of Base64 encoding
 module RON.Base64
-    ( decode
+    ( alphabet
+    , decode
     , decode60
     , decode60base32
     , decode64
@@ -37,15 +38,12 @@ alphabet :: ByteString
 alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~"
 
 -- | Check if a character is in the Base64 alphabet.
-isLetter :: Char -> Bool
-isLetter c =
-    let ordC               = fromIntegral $ ord c :: Int
-        inRange n (lb, ub) = lb <= n && n <= ub
-    in (ordC - fromIntegral ord0) `inRange` (0, 9)
-    || (ordC - fromIntegral ordA) `inRange` (0, 25)
-    || (ordC - fromIntegral orda) `inRange` (0, 25)
-    || ordC == fromIntegral ord_
-    || ordC == fromIntegral ordõ
+isLetter :: Word8 -> Bool
+isLetter c =    c - ord0 <= 9
+             || c - ordA <= 25
+             || c - orda <= 25
+             || c == ord_
+             || c == ordõ
 
 -- | Convert a Base64 letter to a number [0-63]
 decodeLetter :: Word8 -> Maybe Word6
