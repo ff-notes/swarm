@@ -2,34 +2,34 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module RON.Schema (
-    CaseTransform (..),
-    Declaration (..),
-    Field (..),
-    FieldAnnotations (..),
-    OpaqueAnnotations (..),
-    RonType (..),
-    Schema,
-    StructAnnotations (..),
-    StructLww (..),
-    TAtom (..),
-    TComposite (..),
-    TObject (..),
-    TOpaque (..),
-    atomInteger,
-    atomString,
-    boole,
-    char,
-    def,
-    field,
-    opaqueAtoms,
-    opaqueObject,
-    option,
-    orSet,
-    rgaString,
-    structLww,
-    versionVector,
-) where
+module RON.Schema
+    ( CaseTransform (..)
+    , Declaration (..)
+    , Field (..)
+    , FieldAnnotations (..)
+    , OpaqueAnnotations (..)
+    , RonType (..)
+    , Schema
+    , StructAnnotations (..)
+    , StructLww (..)
+    , TAtom (..)
+    , TComposite (..)
+    , TObject (..)
+    , TOpaque (..)
+    , atomInteger
+    , atomString
+    , boole
+    , char
+    , def
+    , field
+    , opaqueAtoms
+    , opaqueObject
+    , option
+    , orSet
+    , rgaString
+    , structLww
+    , versionVector
+    ) where
 
 import           RON.Internal.Prelude
 
