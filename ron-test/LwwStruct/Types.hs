@@ -1,26 +1,24 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module LwwStruct.Types where
 
-import           RON.Schema
-import           RON.Schema.TH
+import           RON.Schema.TH (mkReplicated)
 
-$(let
-    example1 = StructLww "Example1"
-        [ ("int1", field atomInteger)
-        , ("opt5", field (option $ structLww example1))
-        , ("opt6", field (option atomInteger))
-        , ("set4", field (orSet $ structLww example2))
-        , ("str2", field rgaString)
-        , ("str3", field atomString)
-        ]
-        def
-    example2 = StructLww "Example2" [("vv5", field versionVector)] def
-    in mkReplicated [DStructLww example1, DStructLww example2])
+[mkReplicated|
+    (struct_lww Example2
+        #haskell {field_prefix "example2_"}
+        vv5 VersionVector)
+    (struct_lww Example1
+        #haskell {field_prefix "example1", field_case title}
+        int1 Atom.Integer
+        str2 RgaString
+        str3 Atom.String
+        set4 (ORSet Example2)
+        opt5 (Option Example2)
+        opt6 (Option Atom.Integer))
+|]
 
 deriving instance Eq   Example1
 deriving instance Show Example1

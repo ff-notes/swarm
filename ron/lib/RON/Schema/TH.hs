@@ -7,6 +7,7 @@
 module RON.Schema.TH(
     module X,
     mkReplicated,
+    mkReplicated',
 ) where
 
 import           Prelude hiding (read)
@@ -16,12 +17,15 @@ import           Control.Error (fmapL)
 import           Control.Monad.Except (MonadError)
 import           Control.Monad.State.Strict (MonadState, StateT)
 import qualified Data.ByteString.Char8 as BSC
+import           Data.Char (toTitle)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import           Language.Haskell.TH (Exp (VarE), bindS, conE, conP, conT,
                                       dataD, doE, letS, listE, noBindS, recC,
                                       recConE, sigD, varE, varP, varT)
 import qualified Language.Haskell.TH as TH
+import           Language.Haskell.TH.Quote (QuasiQuoter (QuasiQuoter), quoteDec,
+                                            quoteExp, quotePat, quoteType)
 import           Language.Haskell.TH.Syntax (lift, liftData)
 
 import           RON.Data (Replicated (..), ReplicatedAsObject (..),
@@ -34,12 +38,19 @@ import           RON.Data.RGA (RGA (..))
 import           RON.Data.VersionVector (VersionVector)
 import           RON.Event (ReplicaClock)
 import           RON.Schema as X
+import qualified RON.Schema.EDN as EDN
 import           RON.Types (Object (..), UUID)
 import qualified RON.UUID as UUID
 
+mkReplicated :: QuasiQuoter
+mkReplicated = QuasiQuoter{quoteDec, quoteExp = e, quotePat = e, quoteType = e}
+  where
+    e = error "declaration only"
+    quoteDec = EDN.parseSchema >=> mkReplicated'
+
 -- | Generate Haskell types from RON-Schema
-mkReplicated :: Schema -> TH.DecsQ
-mkReplicated = fmap fold . traverse fromDecl where
+mkReplicated' :: Schema -> TH.DecsQ
+mkReplicated' = fmap fold . traverse fromDecl where
     fromDecl decl = case decl of
         DStructLww s -> mkReplicatedStructLww s
 
@@ -99,7 +110,8 @@ mkReplicatedStructLww struct = do
 
     StructLww{structName, structFields, structAnnotations} = struct
 
-    StructAnnotations{saHaskellFieldPrefix} = structAnnotations
+    StructAnnotations{saHaskellFieldPrefix, saHaskellFieldCaseTransform} =
+        structAnnotations
 
     name = mkNameT structName
 
@@ -165,7 +177,12 @@ mkReplicatedStructLww struct = do
             ]
         consP = conP name [varP field'Var | Field'{field'Var} <- fields]
 
-    mkHaskellFieldName = (saHaskellFieldPrefix <>)
+    mkHaskellFieldName base = saHaskellFieldPrefix <> base' where
+        base' = case saHaskellFieldCaseTransform of
+            Nothing        -> base
+            Just TitleCase -> case Text.uncons base of
+                Nothing            -> base
+                Just (b, baseTail) -> Text.cons (toTitle b) baseTail
 
     mkAccessors field' = do
         a <- varT <$> TH.newName "a"

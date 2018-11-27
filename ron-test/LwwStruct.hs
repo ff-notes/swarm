@@ -19,9 +19,11 @@ import           RON.Event (ReplicaId, applicationSpecific)
 import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
 import           RON.Text (parseObject, serializeObject)
 
-import           LwwStruct.Types (Example1 (..), Example2 (..), int1_assign,
-                                  opt6_assign, opt5_read, opt6_read, str3_read,
-                                  str2_zoom, str3_assign, set4_zoom)
+import           LwwStruct.Types (Example1 (..), Example2 (..),
+                                  example1Int1_assign, example1Opt5_read,
+                                  example1Opt6_assign, example1Opt6_read,
+                                  example1Set4_zoom, example1Str2_zoom,
+                                  example1Str3_assign, example1Str3_read)
 
 type ByteStringL = BSLC.ByteString
 
@@ -29,12 +31,12 @@ type ByteStringL = BSLC.ByteString
 
 example0 :: Example1
 example0 = Example1
-    { int1 = 275
-    , str2 = "275"
-    , str3 = "190"
-    , set4 = mempty
-    , opt5 = Nothing
-    , opt6 = Just 74
+    { example1Int1 = 275
+    , example1Str2 = "275"
+    , example1Str3 = "190"
+    , example1Set4 = mempty
+    , example1Opt5 = Nothing
+    , example1Opt6 = Just 74
     }
 
 -- | "r3pl1c4"
@@ -89,12 +91,12 @@ ex4expect = [i|
 
 example4expect :: Example1
 example4expect = Example1
-    { int1 = 166
-    , str2 = "145"
-    , str3 = "206"
-    , set4 = [Example2{vv5 = mempty}]
-    , opt5 = Nothing
-    , opt6 = Nothing
+    { example1Int1 = 166
+    , example1Str2 = "145"
+    , example1Str3 = "206"
+    , example1Set4 = [Example2{example2_vv5 = mempty}]
+    , example1Opt5 = Nothing
+    , example1Opt6 = Nothing
     }
 
 prop_lwwStruct :: Property
@@ -118,14 +120,14 @@ prop_lwwStruct = property $ do
         runNetworkSim $ runReplicaSim replica $ runExceptT $
         (`runStateT` ex2) $ do
             -- plain field
-            int1_assign 166
-            str2_zoom $ RGA.edit "145"
-            str3Value <- str3_read
-            str3_assign "206"
-            set4_zoom $ ORSet.addNewRef Example2{vv5 = mempty}
-            opt5Value <- opt5_read
-            opt6Value <- opt6_read
-            opt6_assign Nothing
+            example1Int1_assign 166
+            example1Str2_zoom $ RGA.edit "145"
+            str3Value <- example1Str3_read
+            example1Str3_assign "206"
+            example1Set4_zoom $ ORSet.addNewRef Example2{example2_vv5 = mempty}
+            opt5Value <- example1Opt5_read
+            opt6Value <- example1Opt6_read
+            example1Opt6_assign Nothing
             pure (str3Value, opt5Value, opt6Value)
     str3Value === "190"
     opt5Value === Nothing

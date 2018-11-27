@@ -3,7 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module RON.Schema
-    ( Declaration (..)
+    ( CaseTransform (..)
+    , Declaration (..)
     , Field (..)
     , FieldAnnotations (..)
     , OpaqueAnnotations (..)
@@ -62,10 +63,16 @@ data StructLww = StructLww
     }
     deriving (Show)
 
-newtype StructAnnotations = StructAnnotations{saHaskellFieldPrefix :: Text}
+data StructAnnotations = StructAnnotations
+    { saHaskellFieldPrefix        :: Text
+    , saHaskellFieldCaseTransform :: Maybe CaseTransform
+    }
     deriving (Show)
 
-instance Default StructAnnotations where def = StructAnnotations ""
+data CaseTransform = TitleCase
+    deriving (Show)
+
+instance Default StructAnnotations where def = StructAnnotations "" Nothing
 
 data Field = Field{fieldType :: RonType, fieldAnnotations :: FieldAnnotations}
     deriving (Show)
