@@ -63,6 +63,7 @@ library
         extra,
         filepath,
         hashable,
+        hedn,
         mtl,
         network-info,
         safe,
@@ -70,6 +71,7 @@ library
         template-haskell,
         text,
         time,
+        transformers,
         unordered-containers,
         vector,
     exposed-modules:
@@ -104,6 +106,7 @@ library
         Data.ZigZag
         RON.Data.Internal
         RON.Internal.Prelude
+        RON.Schema.EDN
     hs-source-dirs: lib
 
 benchmark bench
