@@ -20,8 +20,8 @@ import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
 import           RON.Text (parseObject, serializeObject)
 
 import           LwwStruct.Types (Example1 (..), Example2 (..), int1_assign,
-                                  opt6_assign, opt5_read, opt6_read, str3_read,
-                                  str2_zoom, str3_assign, set4_zoom)
+                                  opt5_read, opt6_assign, opt6_read, set4_zoom,
+                                  str2_zoom, str3_assign, str3_read)
 
 type ByteStringL = BSLC.ByteString
 
