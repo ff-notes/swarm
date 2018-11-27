@@ -7,6 +7,7 @@
 module RON.Schema.TH(
     module X,
     mkReplicated,
+    mkReplicated',
 ) where
 
 import           Prelude hiding (read)
@@ -23,6 +24,8 @@ import           Language.Haskell.TH (Exp (VarE), bindS, conE, conP, conT,
                                       dataD, doE, letS, listE, noBindS, recC,
                                       recConE, sigD, varE, varP, varT)
 import qualified Language.Haskell.TH as TH
+import           Language.Haskell.TH.Quote (QuasiQuoter (QuasiQuoter), quoteDec,
+                                            quoteExp, quotePat, quoteType)
 import           Language.Haskell.TH.Syntax (lift, liftData)
 
 import           RON.Data (Replicated (..), ReplicatedAsObject (..),
@@ -35,12 +38,19 @@ import           RON.Data.RGA (RGA (..))
 import           RON.Data.VersionVector (VersionVector)
 import           RON.Event (ReplicaClock)
 import           RON.Schema as X
+import qualified RON.Schema.EDN as EDN
 import           RON.Types (Object (..), UUID)
 import qualified RON.UUID as UUID
 
+mkReplicated :: QuasiQuoter
+mkReplicated = QuasiQuoter{quoteDec, quoteExp = e, quotePat = e, quoteType = e}
+  where
+    e = error "declaration only"
+    quoteDec = EDN.parseSchema >=> mkReplicated'
+
 -- | Generate Haskell types from RON-Schema
-mkReplicated :: Schema -> TH.DecsQ
-mkReplicated = fmap fold . traverse fromDecl where
+mkReplicated' :: Schema -> TH.DecsQ
+mkReplicated' = fmap fold . traverse fromDecl where
     fromDecl decl = case decl of
         DStructLww s -> mkReplicatedStructLww s
 
