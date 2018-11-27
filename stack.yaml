@@ -3,3 +3,6 @@ resolver: lts-12.20
 packages:
   - ron
   - ron-test
+
+extra-deps:
+  - hedn-0.1.9.1@sha256:01d77f74d211e1187d94e67dd880e3131d0552a5184c7f067b5e686f94b250c7
