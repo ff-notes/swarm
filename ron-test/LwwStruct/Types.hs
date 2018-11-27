@@ -1,26 +1,62 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
 
-module LwwStruct.Types where
+module LwwStruct.Types (
+    Example1 (..),
+    int1_assign,
+    int1_read,
+    int1_zoom,
+    str2_assign,
+    str2_read,
+    str2_zoom,
+    str3_assign,
+    str3_read,
+    str3_zoom,
+    set4_assign,
+    set4_read,
+    set4_zoom,
+    opt5_assign,
+    opt5_read,
+    opt5_zoom,
+    opt6_assign,
+    opt6_read,
+    opt6_zoom,
+    Example2 (..),
+    vv5_assign,
+    vv5_read,
+    vv5_zoom,
+    -- * tests
+    tfp_field_assign,
+    tfp_field_read,
+    tfp_field_zoom,
+    tfpatInnerField_assign,
+    tfpatInnerField_read,
+    tfpatInnerField_zoom,
+) where
 
-import           RON.Schema
-import           RON.Schema.TH
+import           RON.Schema.TH (mkReplicated)
 
-$(let
-    example1 = StructLww "Example1"
-        [ ("int1", field atomInteger)
-        , ("opt5", field (option $ structLww example1))
-        , ("opt6", field (option atomInteger))
-        , ("set4", field (orSet $ structLww example2))
-        , ("str2", field rgaString)
-        , ("str3", field atomString)
-        ]
-        def
-    example2 = StructLww "Example2" [("vv5", field versionVector)] def
-    in mkReplicated [DStructLww example1, DStructLww example2])
+[mkReplicated|
+    (struct_lww Example2
+        vv5 VersionVector)
+
+    (struct_lww Example1
+        int1 AtomInteger
+        str2 RgaString
+        str3 AtomString
+        set4 (ORSet Example2)
+        opt5 (Option Example2)
+        opt6 (Option AtomInteger))
+
+    (struct_lww TestFieldPrefix
+        #haskell {field_prefix "tfp_"}
+        field AtomInteger)
+
+    (struct_lww TestFieldPrefixAndTitle
+        #haskell {field_prefix "tfpat", field_case title}
+        innerField AtomInteger)
+|]
 
 deriving instance Eq   Example1
 deriving instance Show Example1

@@ -3,3 +3,10 @@ resolver: nightly-2018-11-15
 packages:
   - ron
   - ron-test
+
+extra-deps:
+  # ron:
+  - hedn-0.1.9.1@sha256:01d77f74d211e1187d94e67dd880e3131d0552a5184c7f067b5e686f94b250c7
+
+  # hedn:
+  - stringsearch-0.3.6.6@sha256:e88c03f4adb4bb3ab88550c921a9a8a2836a0a70f58b9cc64cff2ac65af9b77c
