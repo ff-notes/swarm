@@ -112,11 +112,9 @@ parseStructLww code = do
 
 parseCaseTransform :: Value -> Parser CaseTransform
 parseCaseTransform =
-    runIdentityT .
-    withSymbol "case transformation symbol"
-        (withNoPrefix "case transformation" go)
-  where
-    go = \case
+    (runIdentityT .) $
+    withSymbol "case transformation symbol" $
+    withNoPrefix "case transformation" $ \case
         "title" -> pure TitleCase
         _       -> fail "unknown case transformation"
 
@@ -135,11 +133,10 @@ parseEdnStream input
 
 parseType :: Tagged Value -> Parser' RonType
 parseType = withNoTag $ \case
-    Symbol "" typeName -> case typeName of
-        name            ->
-            gets (Map.lookup (Text.decodeUtf8 name) . knownTypes) >>= \case
-                Nothing  -> fail $ "unknown type " ++ decodeUtf8 name
-                Just typ -> pure typ
+    Symbol "" name ->
+        gets (Map.lookup (Text.decodeUtf8 name) . knownTypes) >>= \case
+            Nothing  -> fail $ "unknown type " ++ decodeUtf8 name
+            Just typ -> pure typ
     Symbol _ _ -> fail "types must not be prefixed"
     List expr -> evalType expr
     value -> lift $ typeMismatch "type symbol or expression" value
