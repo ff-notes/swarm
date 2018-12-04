@@ -23,7 +23,6 @@ import           Control.Monad.State.Strict (State, evalState, runState, state)
 import qualified Data.Aeson as Json
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC
-import qualified Data.ByteString.Lazy.Search as BSL
 import qualified Data.Map.Strict as Map
 import           Data.Text (Text)
 import           Data.Traversable (for)
@@ -135,9 +134,13 @@ serializeAtomZip = \case
 -- | Serialize a string atom
 serializeString :: Text -> ByteStringL
 serializeString =
-    fixQuotes . BSL.replace "'" ("\\'" :: ByteString) . Json.encode
+    wrapSingleQuotes . escapeApostrophe . stripDoubleQuotes . Json.encode
   where
-    fixQuotes = (`BSLC.snoc` '\'') . BSLC.cons '\'' . BSL.init . BSL.tail
+    wrapSingleQuotes = (`BSLC.snoc` '\'') . BSLC.cons '\''
+    stripDoubleQuotes = BSL.init . BSL.tail
+    escapeApostrophe s = let
+        (s1, s2) = BSLC.break (== '\'') s
+        in if BSL.null s2 then s1 else s1 <> BSL.tail s2
 
 -- | Serialize a payload in stream context
 serializePayload

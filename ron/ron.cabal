@@ -65,7 +65,6 @@ library
         mtl,
         network-info,
         safe,
-        stringsearch,
         template-haskell,
         text,
         time,

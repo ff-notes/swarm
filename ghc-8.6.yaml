@@ -3,6 +3,3 @@ resolver: nightly-2018-11-15
 packages:
   - ron
   - ron-test
-
-extra-deps:
-  - stringsearch-0.3.6.6@sha256:e88c03f4adb4bb3ab88550c921a9a8a2836a0a70f58b9cc64cff2ac65af9b77c
