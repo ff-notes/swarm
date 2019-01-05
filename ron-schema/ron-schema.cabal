@@ -51,11 +51,11 @@ library
     import: language
     build-depends:
         -- global
-        attoparsec,
         bytestring,
         containers,
         errors,
-        hedn,
+        hedn >= 0.2 && < 0.3,
+        megaparsec,
         mtl,
         template-haskell,
         text,
@@ -67,5 +67,6 @@ library
         RON.Schema
         RON.Schema.TH
     other-modules:
+        Data.EDN.Extra
         RON.Schema.EDN
     hs-source-dirs: lib

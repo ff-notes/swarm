@@ -1,5 +1,8 @@
+{-# OPTIONS -Wno-orphans #-}
+
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,37 +10,30 @@
 
 module RON.Schema.EDN (readSchema) where
 
+import           Prelude hiding (fail)
+
+import           Control.Applicative (optional, (<|>))
 import           Control.Monad (unless)
+import           Control.Monad.Fail (MonadFail, fail)
 import           Control.Monad.State.Strict (MonadState, execStateT, get, put)
-import           Data.Attoparsec.Lazy (Result (Done))
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy.Char8 as BSLC
-import           Data.Char (isSpace)
-import           Data.EDN (Tagged (NoTag, Tagged), Value (List, Map, Symbol),
-                           (.!=), (.:?))
-import           Data.EDN.Encode (fromTagged)
-import           Data.EDN.Parser (parseBSL)
-import           Data.EDN.Types (EDNList, EDNMap)
-import           Data.EDN.Types.Class (Parser, parseEither, typeMismatch)
+import           Data.EDN (FromEDN, Tagged (NoTag, Tagged),
+                           Value (List, Symbol), mapGetSymbol, parseEDN,
+                           renderText, unexpected, withList, withMap, withNoTag)
+import           Data.EDN.Class.Parser (parseM)
+import           Data.EDN.Extra (decodeMultiDoc, isTagged, parseList,
+                                 parseSymbol', withNoPrefix, withSymbol')
 import           Data.Foldable (for_, traverse_)
 import           Data.Map.Strict (Map, (!), (!?))
 import qualified Data.Map.Strict as Map
 import           Data.Maybe (fromMaybe)
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
-import qualified Data.Text.Lazy as TextL
-import           Data.Text.Lazy.Builder (toLazyText)
-import qualified Data.Text.Lazy.Encoding as TextL
-
-import           RON.Util (ByteStringL)
 
 import           RON.Schema
 
-readSchema :: Monad m => String -> m (Schema 'Resolved)
-readSchema source = do
-    parsed <- parseSchema source
+readSchema :: MonadFail m => String -> Text -> m (Schema 'Resolved)
+readSchema sourceName source = do
+    parsed <- parseSchema sourceName source
     env <- (`execStateT` Env{userTypes=Map.empty}) $ do
         collectDeclarations parsed
         validateTypeUses    parsed
@@ -65,47 +61,43 @@ prelude = Map.fromList
     char = opaqueAtoms "Char" OpaqueAnnotations{oaHaskellType = Just "Char"}
     day = opaqueAtoms_ "Day"
 
-parseDeclaration :: Tagged Value -> Parser (Declaration 'Parsed)
-parseDeclaration = withNoTag $ withList "declaration" $ \case
-    func : args -> go =<< parseText "declaration name" func
-      where
-        go = \case
-            "enum"       -> DEnum      <$> parseEnum      args
-            "opaque"     -> DOpaque    <$> parseOpaque    args
-            "struct_lww" -> DStructLww <$> parseStructLww args
+instance FromEDN (Declaration 'Parsed) where
+    parseEDN = withNoTag . withList $ \case
+        func : args -> (`withSymbol'` func) $ \case
+            "enum"       -> DEnum      <$> parseList args
+            "opaque"     -> DOpaque    <$> parseList args
+            "struct_lww" -> DStructLww <$> parseList args
             name         -> fail $ "unknown declaration " ++ Text.unpack name
-    [] -> fail "empty declaration"
+        [] -> fail "empty declaration"
 
-parseEnum :: EDNList -> Parser TEnum
-parseEnum = \case
-    name : items -> Enum
-        <$> parseText "enum name" name
-        <*> traverse (parseText "enum item") items
-    [] -> fail
-        "Expected declaration in the form\
-        \ (enum <name:symbol> <item:symbol>...)"
+instance FromEDN TEnum where
+    parseEDN = withNoTag . withList $ \case
+        name : items -> Enum
+            <$> parseSymbol' name
+            <*> traverse parseSymbol' items
+        [] -> fail
+            "Expected declaration in the form\
+            \ (enum <name:symbol> <item:symbol>...)"
 
-parseOpaque :: EDNList -> Parser Opaque
-parseOpaque = \case
-    kind : name : annotations ->
-        parseText "opaque kind" kind >>= \case
-            "atoms"  -> go False
-            "object" -> go True
-            _        -> fail "opaque kind must be either atoms or object"
-        where
-        go isObject =
-            Opaque
-                isObject
-                <$> parseText "opaque name" name
-                <*> parseAnnotations
-        parseAnnotations = case annotations of
-            [] -> pure defaultOpaqueAnnotations
-            _  -> fail "opaque annotations are not implemented yet"
-    _ -> fail
-        "Expected declaration in the form\
-        \ (opaque <kind:symbol> <name:symbol> <annotations>...)"
+instance FromEDN Opaque where
+    parseEDN = withNoTag . withList $ \case
+        kind : name : annotations ->
+            (`withSymbol'` kind) $ \case
+                "atoms"  -> go False
+                "object" -> go True
+                _        -> fail "opaque kind must be either atoms or object"
+            where
+            go isObject =
+                Opaque isObject <$> parseSymbol' name <*> parseAnnotations
+            parseAnnotations = case annotations of
+                [] -> pure defaultOpaqueAnnotations
+                _  -> fail "opaque annotations are not implemented yet"
+        _ -> fail
+            "Expected declaration in the form\
+            \ (opaque <kind:symbol> <name:symbol> <annotations>...)"
 
-rememberDeclaration :: MonadState Env m => Declaration 'Parsed -> m ()
+rememberDeclaration
+    :: (MonadFail m, MonadState Env m) => Declaration 'Parsed -> m ()
 rememberDeclaration decl = do
     env@Env{userTypes} <- get
     if name `Map.member` userTypes then
@@ -121,81 +113,76 @@ declarationName = \case
     DOpaque    Opaque   {opaqueName} -> opaqueName
     DStructLww StructLww{structName} -> structName
 
-parseStructLww :: EDNList -> Parser (StructLww 'Parsed)
-parseStructLww = \case
-    name : body -> do
-        let (annotations, fields) = span isTagged body
-        StructLww
-            <$> parseText "struct_lww name" name
-            <*> parseFields fields
-            <*> parseAnnotations annotations
-    [] -> fail
-        "Expected declaration in the form\
-        \ (struct_lww <name:symbol> <annotations>... <fields>...)"
+instance FromEDN (StructLww 'Parsed) where
+    parseEDN = withNoTag . withList $ \case
+        name : body -> do
+            let (annotations, fields) = span isTagged body
+            StructLww
+                <$> parseSymbol' name
+                <*> parseFields fields
+                <*> parseList annotations
+        [] -> fail
+            "Expected declaration in the form\
+            \ (struct_lww <name:symbol> <annotations>... <fields>...)"
 
-  where
+      where
 
-    parseFields = \case
-        [] -> pure mempty
-        nameAsTagged : typeAsTagged : cont -> do
-            name <- parseText "struct_lww field name" nameAsTagged
-            typ  <- parseTypeExpr typeAsTagged
-            Map.insert name (Field typ) <$> parseFields cont
-        [f] -> fail $ "field " ++ showEdn f ++ " must have type"
+        parseFields = \case
+            [] -> pure mempty
+            nameAsTagged : typeAsTagged : cont -> do
+                name <- parseSymbol' nameAsTagged
+                typ  <- parseEDN typeAsTagged
+                Map.insert name (Field typ) <$> parseFields cont
+            [f] ->
+                fail $ "field " ++ Text.unpack (renderText f) ++ " must have type"
 
-    parseAnnotations annTaggedValues = do
+instance FromEDN StructAnnotations where
+    parseEDN = withNoTag . withList $ \annTaggedValues -> do
         annValues <- traverse unwrapTag annTaggedValues
         case lookup "haskell" annValues of
             Nothing -> pure defaultStructAnnotations
-            Just annValue ->
-                withMap "struct_lww haskell annotations map" go annValue
+            Just annValue -> withMap go annValue
       where
         unwrapTag = \case
-            Tagged value prefix tag -> let
-                name | BS.null prefix = tag | otherwise = prefix <> "/" <> tag
+            Tagged prefix tag value -> let
+                name = case prefix of
+                    "" -> tag
+                    _  -> prefix <> "/" <> tag
                 in pure (name, value)
             NoTag _ -> fail "annotation must be a tagged value"
-        go m =
-            StructAnnotations
-            <$>  m .:? Symbol "" "field_prefix" .!= ""
-            <*> (m .:? Symbol "" "field_case" >>= traverse parseCaseTransform)
+        go m = do
+            saHaskellFieldPrefix <- mapGetSymbol "field_prefix" m <|> pure ""
+            saHaskellFieldCaseTransform <-
+                optional $ mapGetSymbol "field_case" m
+            pure StructAnnotations{..}
 
-parseCaseTransform :: Tagged Value -> Parser CaseTransform
-parseCaseTransform v =
-    parseText "case transformation" v >>= \case
+instance FromEDN CaseTransform where
+    parseEDN = withSymbol' $ \case
         "title" -> pure TitleCase
         _       -> fail "unknown case transformation"
 
-parseSchema :: Monad m => String -> m (Schema 'Parsed)
-parseSchema string = either fail pure $ do
-    values <- parseEdnStream $ encodeUtf8L string
-    parseEither (traverse parseDeclaration) values
+parseSchema :: MonadFail m => String -> Text -> m (Schema 'Parsed)
+parseSchema sourceName source = do
+    values <- decodeMultiDoc sourceName source
+    parseM (traverse parseEDN) values
 
-parseEdnStream :: ByteStringL -> Either String EDNList
-parseEdnStream input
-    | BSLC.all isSpace input = pure []
-    | otherwise              =
-        case parseBSL input of
-            Done rest value -> (value :) <$> parseEdnStream rest
-            failure         -> Left $ show failure
+instance FromEDN TypeExpr where
+    parseEDN = withNoTag $ \case
+        Symbol prefix name -> withNoPrefix (pure . Use) prefix name
+        List values -> do
+            exprs <- traverse parseEDN values
+            case exprs of
+                []       -> fail "empty type expression"
+                f : args -> case f of
+                    Use typ -> pure $ Apply typ args
+                    Apply{} ->
+                        fail "type function must be a name, not expression"
+        value -> value `unexpected` "type symbol or expression"
 
-parseTypeExpr :: Tagged Value -> Parser TypeExpr
-parseTypeExpr = withNoTag $ \case
-    Symbol "" name -> pure $ Use (Text.decodeUtf8 name)
-    Symbol _ _ -> fail "types must not be prefixed"
-    List values -> do
-        exprs <- traverse parseTypeExpr values
-        case exprs of
-            []       -> fail "empty type expression"
-            f : args -> case f of
-                Use typ -> pure $ Apply typ args
-                Apply{} -> fail "type function must be a name, not expression"
-    value -> typeMismatch "type symbol or expression" value
-
-collectDeclarations :: MonadState Env m => Schema 'Parsed -> m ()
+collectDeclarations :: (MonadFail m, MonadState Env m) => Schema 'Parsed -> m ()
 collectDeclarations = traverse_ rememberDeclaration
 
-validateTypeUses :: MonadState Env m => Schema 'Parsed -> m ()
+validateTypeUses :: (MonadFail m, MonadState Env m) => Schema 'Parsed -> m ()
 validateTypeUses = traverse_ $ \case
     DEnum      _                       -> pure ()
     DOpaque    _                       -> pure ()
@@ -244,58 +231,3 @@ evalSchema env = fst <$> userTypes' where
             _   -> error
                 $   Text.unpack name ++ " expects 1 argument, got "
                 ++  show (length args)
-
--- * Parser helpers
-
-withNoPrefix
-    :: Monad m
-    => String -> (ByteString -> m a) -> ByteString -> ByteString -> m a
-withNoPrefix ctx f prefix name = do
-    unless (prefix == "") $ fail $ ctx ++ ": empty prefix expected"
-    f name
-
-withList :: String -> (EDNList -> Parser a) -> Value -> Parser a
-withList expected f = \case
-    List list -> f list
-    value     -> typeMismatch expected value
-
-withMap :: String -> (EDNMap -> Parser a) -> Value -> Parser a
-withMap expected f = \case
-    Map m -> f m
-    value -> typeMismatch expected value
-
-withNoTag :: Monad m => (Value -> m a) -> Tagged Value -> m a
-withNoTag f = \case
-    NoTag value         -> f value
-    Tagged _ prefix tag -> fail
-        $ "when expecting a non-tagged value, encountered tag "
-        ++ decodeUtf8 prefix ++ "/" ++ decodeUtf8 tag ++ " instead"
-
-withSymbol
-    :: String -> (ByteString -> ByteString -> Parser a) -> Value -> Parser a
-withSymbol expected f = \case
-    Symbol prefix symbol -> f prefix symbol
-    value                -> typeMismatch expected value
-
-parseText :: String -> Tagged Value -> Parser Text
-parseText name =
-    withNoTag $ withSymbol (name ++ " symbol") $ withNoPrefix name $
-    pure . Text.decodeUtf8
-
--- * ByteString helpers
-
-decodeUtf8 :: ByteString -> String
-decodeUtf8 = Text.unpack . Text.decodeUtf8
-
-encodeUtf8L :: String -> ByteStringL
-encodeUtf8L = TextL.encodeUtf8 . TextL.pack
-
--- * EDN helpers
-
-isTagged :: Tagged a -> Bool
-isTagged = \case
-    NoTag {} -> False
-    Tagged{} -> True
-
-showEdn :: Tagged Value -> String
-showEdn = TextL.unpack . toLazyText . fromTagged

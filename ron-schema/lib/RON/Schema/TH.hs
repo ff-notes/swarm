@@ -28,9 +28,10 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import           Data.Traversable (for)
 import           GHC.Stack (HasCallStack)
-import           Language.Haskell.TH (Exp (VarE), bindS, conE, conP, conT, doE,
-                                      lamCaseE, letS, listE, noBindS, normalB,
-                                      recC, recConE, sigD, varE, varP, varT)
+import           Language.Haskell.TH (Exp (VarE), Loc (Loc), bindS, conE, conP,
+                                      conT, doE, lamCaseE, letS, listE, noBindS,
+                                      normalB, recC, recConE, sigD, varE, varP,
+                                      varT)
 import qualified Language.Haskell.TH as TH
 import           Language.Haskell.TH.Quote (QuasiQuoter (QuasiQuoter), quoteDec,
                                             quoteExp, quotePat, quoteType)
@@ -51,11 +52,15 @@ import           RON.Types (Object (..), UUID)
 import           RON.Util (Instance (Instance))
 import qualified RON.UUID as UUID
 
+-- | QuasiQuoter to generate Haskell types from RON-Schema
 mkReplicated :: HasCallStack => QuasiQuoter
 mkReplicated = QuasiQuoter{quoteDec, quoteExp = e, quotePat = e, quoteType = e}
   where
     e = error "declaration only"
-    quoteDec = EDN.readSchema >=> mkReplicated'
+    quoteDec source = do
+        Loc{loc_filename} <- TH.location
+        schema <- EDN.readSchema loc_filename $ Text.pack source
+        mkReplicated' schema
 
 -- | Generate Haskell types from RON-Schema
 mkReplicated' :: HasCallStack => Schema 'Resolved -> TH.DecsQ

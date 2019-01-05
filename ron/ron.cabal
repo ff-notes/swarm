@@ -60,7 +60,6 @@ library
         template-haskell,
         text,
         time,
-        transformers,
         unordered-containers
     exposed-modules:
         RON.Base64

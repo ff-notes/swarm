@@ -9,4 +9,8 @@ packages:
   - examples
 
 extra-deps:
-  - hedn-0.1.9.1@sha256:01d77f74d211e1187d94e67dd880e3131d0552a5184c7f067b5e686f94b250c7
+  # ron-schema:
+  - hedn-0.2.0.0
+
+  # hedn:
+  - megaparsec-7.0.4@sha256:a7397151601cbe6b8f831f8bdad1a10118dcd6d9a7ee50d6bbdcfbd1181b4ba2

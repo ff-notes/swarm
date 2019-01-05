@@ -10,7 +10,7 @@ packages:
 
 extra-deps:
   # ron-schema:
-  - hedn-0.1.9.1@sha256:01d77f74d211e1187d94e67dd880e3131d0552a5184c7f067b5e686f94b250c7
+  - hedn-0.2.0.0
 
   # ron-test:
   - hedgehog-0.6.1@sha256:c16546b1a7c38fa0e2d54dd287c198b8ba8173f6e70735d28d6d545b6ea943ba
