@@ -1,4 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module RON.Schema (
     CaseTransform (..),
@@ -8,12 +15,16 @@ module RON.Schema (
     OpaqueAnnotations (..),
     RonType (..),
     Schema,
+    Stage (..),
     StructAnnotations (..),
     StructLww (..),
     TAtom (..),
-    TEnum (..),
     TComposite (..),
+    TEnum (..),
     TObject (..),
+    TypeExpr (..),
+    TypeName,
+    UseType,
     defaultOpaqueAnnotations,
     defaultStructAnnotations,
     opaqueAtoms,
@@ -24,6 +35,13 @@ module RON.Schema (
 import           Data.Map.Strict (Map)
 import           Data.Text (Text)
 import qualified Data.Text as Text
+
+data Stage = Parsed | Resolving | Resolved
+
+type TypeName = Text
+
+data TypeExpr = Use TypeName | Apply TypeName [TypeExpr]
+    deriving (Show)
 
 data TAtom = TAInteger | TAString
     deriving (Show)
@@ -46,16 +64,16 @@ data TEnum = Enum {enumName :: Text, enumItems :: [Text]}
 data TObject
     = TORSet     RonType
     | TRga       RonType
-    | TStructLww StructLww
+    | TStructLww (StructLww 'Resolved)
     | TVersionVector
     deriving (Show)
 
-data StructLww = StructLww
+data StructLww stage = StructLww
     { structName        :: Text
-    , structFields      :: Map Text Field
+    , structFields      :: Map Text (Field stage)
     , structAnnotations :: StructAnnotations
     }
-    deriving (Show)
+deriving instance Show (Field stage) => Show (StructLww stage)
 
 data StructAnnotations = StructAnnotations
     { saHaskellFieldPrefix        :: Text
@@ -70,12 +88,21 @@ defaultStructAnnotations = StructAnnotations
 data CaseTransform = TitleCase
     deriving (Show)
 
-newtype Field = Field{fieldType :: RonType}
-    deriving (Show)
+newtype Field stage = Field (UseType stage)
+deriving instance Show (UseType stage) => Show (Field stage)
 
-data Declaration = DEnum TEnum | DOpaque Opaque | DStructLww StructLww
+type family UseType (stage :: Stage) where
+    UseType 'Parsed    = TypeExpr
+    UseType 'Resolving = Either TypeExpr RonType
+    UseType 'Resolved  = RonType
 
-type Schema = [Declaration]
+data Declaration stage =
+    DEnum TEnum | DOpaque Opaque | DStructLww (StructLww stage)
+deriving instance Show (Field stage) => Show (Declaration stage)
+
+type family Schema (stage :: Stage) where
+    Schema 'Resolved = Map TypeName (Declaration 'Resolved)
+    Schema stage     = [Declaration stage]
 
 newtype OpaqueAnnotations = OpaqueAnnotations{oaHaskellType :: Maybe Text}
     deriving (Show)

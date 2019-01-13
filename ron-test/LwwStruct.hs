@@ -19,9 +19,9 @@ import           RON.Event (ReplicaId, applicationSpecific)
 import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
 import           RON.Text (parseObject, serializeObject)
 
-import           LwwStruct.Types (Example1 (..), Example2 (..), int1_assign,
-                                  opt5_read, opt6_assign, opt6_read, set4_zoom,
-                                  str2_zoom, str3_assign, str3_read)
+import           LwwStruct.Types (Example1 (..), int1_assign, opt5_read,
+                                  opt6_assign, opt6_read, set4_zoom, str2_zoom,
+                                  str3_assign, str3_read)
 
 type ByteStringL = BSLC.ByteString
 
@@ -62,16 +62,21 @@ ex1expect = [i|
 
 ex4expect :: ByteStringL
 ex4expect = [i|
-    *lww    #B/000000000y+r3pl1c4   @`]4j           !
+    *lww    #B/000000000y+r3pl1c4   @`]5w           !
                                     @]1K    :int1   =166
                                     @`      :opt5   >none
-                                    @]4j    :opt6   >none
+                                    @]5w    :opt6   >none
                                     @`      :set4   >)3
                                             :str2   >)T
                                     @]36    :str3   '206'
 
-            #]4C                    @`      :0      !
-                                            :vv5    >]3g
+            #]4z                    @`      :0      !
+                                            :int1   =135
+                                            :opt5   >none
+                                            :opt6   >none
+                                            :set4   >]3g
+                                            :str2   >)i
+                                            :str3   '137'
 
     *rga    #]0T                    @]2V    :0      !
                                     @]0B    :`]1P   '2'
@@ -80,10 +85,15 @@ ex4expect = [i|
                                     @]2V            '4'
                                     @]0D            '5'
 
-    *set    #)3                     @]4a            !
-                                    @               >]4C
+            #]4i                    @]4G            !
+                                    @)E             '1'
+                                    @)F             '3'
+                                    @)G             '6'
 
-    *vv     #]3g                    @`              !
+    *set    #]03                    @]5W            !
+                                    @               >]4z
+
+            #]3g                    @`              !
     .
     |]
 
@@ -92,7 +102,14 @@ example4expect = Example1
     { int1 = 166
     , str2 = "145"
     , str3 = "206"
-    , set4 = [Example2{vv5 = mempty}]
+    , set4 = [Example1
+        { int1 = 135
+        , str2 = "136"
+        , str3 = "137"
+        , set4 = []
+        , opt5 = Nothing
+        , opt6 = Nothing
+        }]
     , opt5 = Nothing
     , opt6 = Nothing
     }
@@ -122,7 +139,16 @@ prop_lwwStruct = property $ do
             str2_zoom $ RGA.edit "145"
             str3Value <- str3_read
             str3_assign "206"
-            set4_zoom $ ORSet.addNewRef Example2{vv5 = mempty}
+            set4_zoom $
+                ORSet.addNewRef
+                    Example1
+                        { int1 = 135
+                        , str2 = "136"
+                        , str3 = "137"
+                        , set4 = []
+                        , opt5 = Nothing
+                        , opt6 = Nothing
+                        }
             opt5Value <- opt5_read
             opt6Value <- opt6_read
             opt6_assign Nothing

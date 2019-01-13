@@ -22,10 +22,6 @@ module LwwStruct.Types (
     opt6_assign,
     opt6_read,
     opt6_zoom,
-    Example2 (..),
-    vv5_assign,
-    vv5_read,
-    vv5_zoom,
     -- * tests
     tfp_field_assign,
     tfp_field_read,
@@ -50,15 +46,12 @@ instance ReplicatedAsPayload TestOpaque where
 [mkReplicated|
     (opaque atoms TestOpaque)
 
-    (struct_lww Example2
-        vv5 VersionVector)
-
     (struct_lww Example1
         int1 Integer
         str2 RgaString
         str3 String
-        set4 (ORSet Example2)
-        opt5 (Option Example2)
+        set4 (ORSet Example1)
+        opt5 (Option Example1)
         opt6 (Option Integer))
 
     (struct_lww TestFieldPrefix
@@ -74,6 +67,3 @@ instance ReplicatedAsPayload TestOpaque where
 
 deriving instance Eq   Example1
 deriving instance Show Example1
-
-deriving instance Eq   Example2
-deriving instance Show Example2

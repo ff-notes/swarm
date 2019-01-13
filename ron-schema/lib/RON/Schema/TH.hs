@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -54,10 +55,10 @@ mkReplicated :: HasCallStack => QuasiQuoter
 mkReplicated = QuasiQuoter{quoteDec, quoteExp = e, quotePat = e, quoteType = e}
   where
     e = error "declaration only"
-    quoteDec = EDN.parseSchema >=> mkReplicated'
+    quoteDec = EDN.readSchema >=> mkReplicated'
 
 -- | Generate Haskell types from RON-Schema
-mkReplicated' :: HasCallStack => Schema -> TH.DecsQ
+mkReplicated' :: HasCallStack => Schema 'Resolved -> TH.DecsQ
 mkReplicated' = fmap fold . traverse fromDecl where
     fromDecl decl = case decl of
         DEnum      e -> mkEnum e
@@ -101,15 +102,18 @@ data Field' = Field'
     , field'Var      :: TH.Name
     }
 
-mkReplicatedStructLww :: HasCallStack => StructLww -> TH.DecsQ
+mkReplicatedStructLww :: HasCallStack => StructLww 'Resolved -> TH.DecsQ
 mkReplicatedStructLww struct = do
-    fields <- for (Map.assocs structFields) $ \(field'Name, Field{fieldType}) ->
-        case UUID.mkName . BSC.pack $ Text.unpack field'Name of
-            Just field'RonName -> do
-                field'Var <- TH.newName $ Text.unpack field'Name
-                pure Field'{field'Type = fieldType, ..}
-            Nothing -> fail $
-                "Field name is not representable in RON: " ++ show field'Name
+    fields <-
+        for (Map.assocs structFields) $
+            \(field'Name, Field fieldType) ->
+                case UUID.mkName . BSC.pack $ Text.unpack field'Name of
+                    Just field'RonName -> do
+                        field'Var <- TH.newName $ Text.unpack field'Name
+                        pure Field'{field'Type = fieldType, ..}
+                    Nothing -> fail $
+                        "Field name is not representable in RON: "
+                        ++ show field'Name
     dataType <- mkDataType
     [instanceReplicated] <- mkInstanceReplicated
     [instanceReplicatedAsObject] <- mkInstanceReplicatedAsObject fields
