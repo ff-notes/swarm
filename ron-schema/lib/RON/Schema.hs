@@ -36,7 +36,7 @@ import           Data.Map.Strict (Map)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 
-data Stage = Parsed | Resolving | Resolved
+data Stage = Parsed | Resolved
 
 type TypeName = Text
 
@@ -92,17 +92,16 @@ newtype Field stage = Field (UseType stage)
 deriving instance Show (UseType stage) => Show (Field stage)
 
 type family UseType (stage :: Stage) where
-    UseType 'Parsed    = TypeExpr
-    UseType 'Resolving = Either TypeExpr RonType
-    UseType 'Resolved  = RonType
+    UseType 'Parsed   = TypeExpr
+    UseType 'Resolved = RonType
 
 data Declaration stage =
     DEnum TEnum | DOpaque Opaque | DStructLww (StructLww stage)
 deriving instance Show (Field stage) => Show (Declaration stage)
 
 type family Schema (stage :: Stage) where
+    Schema 'Parsed   = [Declaration 'Parsed]
     Schema 'Resolved = Map TypeName (Declaration 'Resolved)
-    Schema stage     = [Declaration stage]
 
 newtype OpaqueAnnotations = OpaqueAnnotations{oaHaskellType :: Maybe Text}
     deriving (Show)
