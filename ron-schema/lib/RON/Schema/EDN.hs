@@ -47,15 +47,20 @@ type ByteStringL = BSL.ByteString
 newtype Env = Env{userTypes :: Map TypeName (Declaration 'Parsed)}
     deriving (Show)
 
-prelude :: Map TypeName RonType
+data RonTypeF = Type0 RonType | Type1 (RonType -> RonType)
+
+prelude :: Map TypeName RonTypeF
 prelude = Map.fromList
     [ ("Boole",
+        Type0 $
         opaqueAtoms "Boole" OpaqueAnnotations{oaHaskellType = Just "Bool"})
-    , ("Day",           day)
-    , ("Integer",       TAtom TAInteger)
-    , ("RgaString",     TObject $ TRga char)
-    , ("String",        TAtom TAString)
-    , ("VersionVector", TObject TVersionVector)
+    , ("Day",           Type0 day)
+    , ("Integer",       Type0 $ TAtom TAInteger)
+    , ("RgaString",     Type0 $ TObject $ TRga char)
+    , ("String",        Type0 $ TAtom TAString)
+    , ("VersionVector", Type0 $ TObject TVersionVector)
+    , ("Option",        Type1 $ TComposite . TOption)
+    , ("ORSet",         Type1 $ TObject . TORSet)
     ]
   where
     char = opaqueAtoms "Char" OpaqueAnnotations{oaHaskellType = Just "Char"}
@@ -203,16 +208,10 @@ validateTypeUses = traverse_ $ \case
         unless
             (name `Map.member` userTypes || name `Map.member` prelude)
             (fail $ "unknown type name " ++ Text.unpack name)
-    validateName1 = \case
-        "Option" -> pure ()
-        "ORSet"  -> pure ()
-        name     -> fail $ "unknown parametric type " ++ Text.unpack name
     validateExpr = \case
         Use name -> validateName name
         Apply name args -> do
-            case args of
-                [_] -> validateName1 name
-                _   -> fail "only 1-argument parametric types are supported"
+            validateName name
             for_ args validateExpr
 
 evalSchema :: Env -> Schema 'Resolved
@@ -220,34 +219,32 @@ evalSchema env = fst <$> userTypes' where
     Env{userTypes} = env
     userTypes' = evalDeclaration <$> userTypes
 
-    evalDeclaration :: Declaration 'Parsed -> (Declaration 'Resolved, RonType)
+    evalDeclaration :: Declaration 'Parsed -> (Declaration 'Resolved, RonTypeF)
     evalDeclaration = \case
-        DEnum   t -> (DEnum t, TComposite $ TEnum t)
-        DOpaque t -> (DOpaque t, TOpaque t)
+        DEnum   t -> (DEnum t, Type0 $ TComposite $ TEnum t)
+        DOpaque t -> (DOpaque t, Type0 $ TOpaque t)
         DStructLww StructLww{..} -> let
             structFields' =
                 (\(Field typeExpr) -> Field $ evalType typeExpr)
                 <$> structFields
             struct = StructLww{structFields = structFields', ..}
-            in (DStructLww struct, TObject $ TStructLww struct)
+            in (DStructLww struct, Type0 $ TObject $ TStructLww struct)
 
     getType typ = fromMaybe (snd $ userTypes' ! typ) $ prelude !? typ
 
-    evalType :: TypeExpr -> RonType
     evalType = \case
-        Use   typ      -> getType typ
+        Use   typ      -> case getType typ of
+            Type0 t0 -> t0
+            Type1 _  -> error "type arity mismatch"
         Apply typ args -> applyType typ $ evalType <$> args
 
-    applyType :: TypeName -> [RonType] -> RonType
-    applyType t args = case t of
-        "Option" -> apply "Option" $ TComposite . TOption
-        "ORSet"  -> apply "ORSet"  $ TObject    . TORSet
-        name     -> error $ "unknown parametric type " ++ Text.unpack name
-      where
-        apply name wrapper = case args of
-            [a] -> wrapper a
-            _   -> error $
-                name ++ " expects 1 argument, got " ++ show (length args)
+    applyType name args = case getType name of
+        Type0 _  -> error "type arity mismatch"
+        Type1 t1 -> case args of
+            [a] -> t1 a
+            _   -> error
+                $   Text.unpack name ++ " expects 1 argument, got "
+                ++  show (length args)
 
 -- * Parser helpers
 
