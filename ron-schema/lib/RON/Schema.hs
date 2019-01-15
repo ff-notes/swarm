@@ -1,8 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -73,7 +71,7 @@ data StructLww stage = StructLww
     , structFields      :: Map Text (Field stage)
     , structAnnotations :: StructAnnotations
     }
-deriving instance Show (Field stage) => Show (StructLww stage)
+deriving instance Show (UseType stage) => Show (StructLww stage)
 
 data StructAnnotations = StructAnnotations
     { saHaskellFieldPrefix        :: Text
@@ -97,7 +95,7 @@ type family UseType (stage :: Stage) where
 
 data Declaration stage =
     DEnum TEnum | DOpaque Opaque | DStructLww (StructLww stage)
-deriving instance Show (Field stage) => Show (Declaration stage)
+deriving instance Show (UseType stage) => Show (Declaration stage)
 
 type family Schema (stage :: Stage) where
     Schema 'Parsed   = [Declaration 'Parsed]
