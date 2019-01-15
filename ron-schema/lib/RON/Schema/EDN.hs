@@ -39,7 +39,7 @@ readSchema source = do
     parsed <- parseSchema source
     env <- (`execStateT` Env{userTypes=Map.empty}) $ do
         collectDeclarations parsed
-        validateTypeRefs    parsed
+        validateTypeUses    parsed
     pure $ evalSchema env
 
 type ByteStringL = BSL.ByteString
@@ -191,8 +191,8 @@ parseTypeExpr = withNoTag $ \case
 collectDeclarations :: MonadState Env m => Schema 'Parsed -> m ()
 collectDeclarations = traverse_ rememberDeclaration
 
-validateTypeRefs :: MonadState Env m => Schema 'Parsed -> m ()
-validateTypeRefs = traverse_ $ \case
+validateTypeUses :: MonadState Env m => Schema 'Parsed -> m ()
+validateTypeUses = traverse_ $ \case
     DEnum      _                       -> pure ()
     DOpaque    _                       -> pure ()
     DStructLww StructLww{structFields} ->
