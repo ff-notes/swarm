@@ -37,32 +37,26 @@ import           RON.Schema
 readSchema :: Monad m => String -> m (Schema 'Resolved)
 readSchema source = do
     parsed <- parseSchema source
-    env <- (`execStateT` prelude) $ do
+    env <- (`execStateT` Env{userTypes=Map.empty}) $ do
         collectDeclarations parsed
         validateTypeRefs    parsed
     pure $ evalSchema env
 
 type ByteStringL = BSL.ByteString
 
-data Env = Env
-    { userTypes    :: Map TypeName (Declaration 'Parsed)
-    , builtinTypes :: Map TypeName RonType
-    }
+newtype Env = Env{userTypes :: Map TypeName (Declaration 'Parsed)}
     deriving (Show)
 
-prelude :: Env
-prelude = Env
-    { userTypes = Map.empty
-    , builtinTypes = Map.fromList
-        [ ("Boole",
-            opaqueAtoms "Boole" OpaqueAnnotations{oaHaskellType = Just "Bool"})
-        , ("Day",           day)
-        , ("Integer",       TAtom TAInteger)
-        , ("RgaString",     TObject $ TRga char)
-        , ("String",        TAtom TAString)
-        , ("VersionVector", TObject TVersionVector)
-        ]
-    }
+prelude :: Map TypeName RonType
+prelude = Map.fromList
+    [ ("Boole",
+        opaqueAtoms "Boole" OpaqueAnnotations{oaHaskellType = Just "Bool"})
+    , ("Day",           day)
+    , ("Integer",       TAtom TAInteger)
+    , ("RgaString",     TObject $ TRga char)
+    , ("String",        TAtom TAString)
+    , ("VersionVector", TObject TVersionVector)
+    ]
   where
     char = opaqueAtoms "Char" OpaqueAnnotations{oaHaskellType = Just "Char"}
     day = opaqueAtoms_ "Day"
@@ -205,9 +199,9 @@ validateTypeRefs = traverse_ $ \case
         for_ structFields $ \(Field typeExpr) -> validateExpr typeExpr
   where
     validateName name = do
-        Env{userTypes, builtinTypes} <- get
+        Env{userTypes} <- get
         unless
-            (name `Map.member` userTypes || name `Map.member` builtinTypes)
+            (name `Map.member` userTypes || name `Map.member` prelude)
             (fail $ "unknown type name " ++ Text.unpack name)
     validateName1 = \case
         "Option" -> pure ()
@@ -223,7 +217,7 @@ validateTypeRefs = traverse_ $ \case
 
 evalSchema :: Env -> Schema 'Resolved
 evalSchema env = fst <$> userTypes' where
-    Env{userTypes, builtinTypes} = env
+    Env{userTypes} = env
     userTypes' = evalDeclaration <$> userTypes
 
     evalDeclaration :: Declaration 'Parsed -> (Declaration 'Resolved, RonType)
@@ -237,7 +231,7 @@ evalSchema env = fst <$> userTypes' where
             struct = StructLww{structFields = structFields', ..}
             in (DStructLww struct, TObject $ TStructLww struct)
 
-    getType typ = fromMaybe (snd $ userTypes' ! typ) $ builtinTypes !? typ
+    getType typ = fromMaybe (snd $ userTypes' ! typ) $ prelude !? typ
 
     evalType :: TypeExpr -> RonType
     evalType = \case
