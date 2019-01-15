@@ -194,26 +194,6 @@ parseTypeExpr = withNoTag $ \case
                 Apply{} -> fail "type function must be a name, not expression"
     value -> typeMismatch "type symbol or expression" value
 
--- resolveEvalType :: MonadState Env m => TypeName -> m RonType
--- resolveEvalType name = do
---     env@Env{userTypes, builtinTypes} <- get
---     case builtinTypes !? name of
---         Just typ -> pure typ
---         Nothing -> case userTypes !? name of
---             Just decl -> do
---                 typ <- resolveDeclaration decl
---                 put env{builtinTypes = Map.insert name typ builtinTypes}
---                 pure typ
---             Nothing -> fail
---                 $ "internal error: type use " ++ Text.unpack name
---                 ++ " is valid but not resolved"
-
--- evalDeclaration :: Declaration 'Resolved -> RonType
--- evalDeclaration = \case
---     DEnum enum        -> TComposite $ TEnum enum
---     DOpaque opaque    -> TOpaque opaque
---     DStructLww struct -> TObject $ TStructLww struct
-
 collectDeclarations :: MonadState Env m => Schema 'Parsed -> m ()
 collectDeclarations = traverse_ rememberDeclaration
 
@@ -240,29 +220,6 @@ validateTypeRefs = traverse_ $ \case
                 [_] -> validateName1 name
                 _   -> fail "only 1-argument parametric types are supported"
             for_ args validateExpr
-
--- resolveSchema :: MonadState Env m => Schema 'Parsed -> m (Schema 'Resolved)
--- resolveSchema = traverse (resolveDeclaration . declarationToResolving)
-
--- resolveDeclaration
---     :: MonadState Env m => Declaration 'Resolving -> m (Declaration 'Resolving)
--- resolveDeclaration = \case
---     DEnum   d -> pure $ DEnum   d
---     DOpaque d -> pure $ DOpaque d
---     DStructLww StructLww{..} -> DStructLww <$> do
---         structFields' <- traverse resolveField structFields
---         pure StructLww{structFields = structFields', ..}
-
--- declarationToResolving :: Declaration 'Parsed -> Declaration 'Resolving
--- declarationToResolving = \case
---     DEnum   d -> DEnum   d
---     DOpaque d -> DOpaque d
---     DStructLww StructLww{..} -> DStructLww $ let
---         structFields' = (\(Field a) -> Field $ Left a) <$> structFields
---         in StructLww{structFields = structFields', ..}
-
--- resolveField :: MonadState Env m => Field 'Resolving -> m (Field 'Resolved)
--- resolveField (Field typeExpr) = Field <$> evalType typeExpr
 
 evalSchema :: Env -> Schema 'Resolved
 evalSchema env = fst <$> userTypes' where
@@ -342,6 +299,8 @@ decodeUtf8 = Text.unpack . Text.decodeUtf8
 
 encodeUtf8L :: String -> ByteStringL
 encodeUtf8L = TextL.encodeUtf8 . TextL.pack
+
+-- * EDN helpers
 
 isTagged :: Tagged a -> Bool
 isTagged = \case
