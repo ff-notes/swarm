@@ -164,7 +164,7 @@ mkReplicatedStructLww struct = do
                 objectOpType = lwwType
                 newObject $consP = LWW.newObject $fieldsToPack
                 getObject $(varP obj) =
-                    errorContext $(liftString errCtx) $getObjectImpl
+                    errorContext $(liftText errCtx) $getObjectImpl
             |]
       where
         fieldsToPack = listE
@@ -176,7 +176,7 @@ mkReplicatedStructLww struct = do
                     Nothing  -> fieldVarE
                     Just con -> [| $(conE con) $fieldVarE |]
             ]
-        errCtx = "getObject @" <> Text.unpack structName <> ":\n"
+        errCtx = "getObject @" <> structName <> ":\n"
         consE = recConE name
             [ pure (fieldName, VarE field'Var)
             | Field'{field'Name, field'Var} <- fields
@@ -305,3 +305,6 @@ mkEnum Enum{enumName, enumItems} = do
                     [| throwErrorString "expected one of enum items" |]]
         liftDataP = dataToPatQ $ const Nothing
         match pat body = TH.match pat (normalB body) []
+
+liftText :: Text -> TH.ExpQ
+liftText t = [| Text.pack $(liftString $ Text.unpack t) |]

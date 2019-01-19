@@ -42,15 +42,15 @@ import           System.Directory (canonicalizePath, createDirectoryIfMissing,
 import           System.IO.Error (isDoesNotExistError)
 
 import           RON.Epoch (EpochClock, getCurrentEpochTime, runEpochClock)
-import           RON.Error (throwErrorString)
+import           RON.Error (Error, throwErrorString)
 import           RON.Event (EpochTime, ReplicaClock, ReplicaId, advance,
                             applicationSpecific, getEvents, getPid)
 
 import           RON.Storage as X
 
 -- | Environment is the dataDir
-newtype Storage a = Storage (ExceptT String (ReaderT Handle EpochClock) a)
-    deriving (Applicative, Functor, Monad, MonadError String, MonadIO)
+newtype Storage a = Storage (ExceptT Error (ReaderT Handle EpochClock) a)
+    deriving (Applicative, Functor, Monad, MonadError Error, MonadIO)
 
 -- | Run a 'Storage' action
 runStorage :: Handle -> Storage a -> IO a
@@ -59,7 +59,7 @@ runStorage h@Handle{hReplica, hClock} (Storage action) = do
         runEpochClock hReplica hClock $
         (`runReaderT` h) $
         runExceptT action
-    either fail pure res
+    either throwIO pure res
 
 instance ReplicaClock Storage where
     getPid    = Storage . lift $ lift getPid

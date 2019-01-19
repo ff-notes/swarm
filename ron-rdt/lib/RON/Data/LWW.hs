@@ -18,6 +18,7 @@ module RON.Data.LWW
     ) where
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 
 import           RON.Data.Internal (Reducible, Replicated, ReplicatedAsObject,
                                     collectFrame, fromRon, getObjectStateChunk,
@@ -72,7 +73,7 @@ viewField
     -> StateFrame
     -> m a
 viewField field StateChunk{..} frame =
-    errorContext ("LWW.viewField " <> show field) $ do
+    errorContext ("LWW.viewField " <> Text.pack (show field)) $ do
         let ops = filter ((field ==) . opRef) stateBody
         Op{..} <- case ops of
             []   -> throwError "no field in lww chunk"
@@ -123,7 +124,7 @@ zoomField
     -> StateT (Object inner) m a  -- ^ Nested object modifier
     -> StateT (Object outer) m a
 zoomField field innerModifier =
-    errorContext ("LWW.zoomField" <> show field) $ do
+    errorContext ("LWW.zoomField" <> Text.pack (show field)) $ do
         obj@Object{..} <- get
         StateChunk{..} <- getObjectStateChunk obj
         let ops = filter ((field ==) . opRef) stateBody

@@ -12,6 +12,7 @@ import           Data.Functor.Compose (Compose (Compose), getCompose)
 import           Data.Map.Strict ((!), (!?))
 import qualified Data.Map.Strict as Map
 
+import           RON.Error (Error)
 import           RON.Event (ReplicaClock, applicationSpecific)
 import           RON.Event.Simulation (ReplicaSim, runNetworkSim, runReplicaSim)
 import           RON.Util (ByteStringL)
@@ -30,10 +31,10 @@ type DocumentId = FilePath
 
 -- * Storage simulation
 
-newtype StorageSim a = StorageSim (StateT TestDB (ExceptT String ReplicaSim) a)
-    deriving (Applicative, Functor, Monad, MonadError String, ReplicaClock)
+newtype StorageSim a = StorageSim (StateT TestDB (ExceptT Error ReplicaSim) a)
+    deriving (Applicative, Functor, Monad, MonadError Error, ReplicaClock)
 
-runStorageSim :: TestDB -> StorageSim a -> Either String (a, TestDB)
+runStorageSim :: TestDB -> StorageSim a -> Either Error (a, TestDB)
 runStorageSim db (StorageSim action) =
     runNetworkSim $ runReplicaSim (applicationSpecific 34) $
     runExceptT $ runStateT action db

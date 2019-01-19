@@ -1,22 +1,36 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module RON.Error (
+    Error (..),
     MonadE,
     errorContext,
     liftMaybe,
     throwErrorString,
+    throwErrorText,
 ) where
 
 import           Data.String (IsString, fromString)
 
-type MonadE = MonadError String
+data Error
+    = Error        Text [Error]
+    | ErrorContext Text  Error
+    deriving (Exception, Eq, Show)
 
-errorContext :: MonadE m => String -> m a -> m a
-errorContext ctx action = action `catchError` (throwError . ((ctx ++ ": ") ++))
+instance IsString Error where
+    fromString s = Error (fromString s) []
 
-liftMaybe :: MonadE m => String -> Maybe a -> m a
-liftMaybe msg = maybe (throwErrorString msg) pure
+type MonadE = MonadError Error
+
+errorContext :: MonadE m => Text -> m a -> m a
+errorContext ctx action = action `catchError` (throwError . ErrorContext ctx)
+
+liftMaybe :: MonadE m => Text -> Maybe a -> m a
+liftMaybe msg = maybe (throwErrorText msg) pure
+
+throwErrorText :: MonadE m => Text -> m a
+throwErrorText msg = throwError $ Error msg []
 
 throwErrorString :: (MonadError e m, IsString e) => String -> m a
 throwErrorString msg = throwError $ fromString msg
