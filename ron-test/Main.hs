@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -26,6 +27,9 @@ import qualified Text.Show
 import qualified RON.Base64 as Base64
 import qualified RON.Binary.Parse as RB
 import qualified RON.Binary.Serialize as RB
+import           RON.Data (newObject)
+import           RON.Data.ORSet (ORSet (ORSet))
+import qualified RON.Data.ORSet as ORSet
 import qualified RON.Data.RGA as RGA
 import           RON.Event (CalendarEvent (CalendarEvent), Naming (TrieForked),
                             ReplicaId (ReplicaId), applicationSpecific,
@@ -335,10 +339,42 @@ prop_RGA_delete_deleted = let
         rga2expect === prep rga2
 
 prop_base64_isLetter = property $ do
-        c <- forAll $ Gen.word8 Range.constantBounded
-        (c `BS.elem` Base64.alphabet) === Base64.isLetter c
+    c <- forAll $ Gen.word8 Range.constantBounded
+    (c `BS.elem` Base64.alphabet) === Base64.isLetter c
 
 data ShowAs a = ShowAs a String
 
 instance Show (ShowAs a) where
     show (ShowAs _ s) = s
+
+prop_ORSet = let
+    prep = map BSLC.words . BSLC.lines . RT.serializeStateFrame . objectFrame
+    set0expect = [["*set", "#B/000000000O+000000005U", "@`", "!"], ["."]]
+    set1expect =
+        [ ["*set", "#B/000000000O+000000005U", "@`)V", "!"]
+        , ["@", "=364"]
+        , ["."]
+        ]
+    set2expect =
+        [ ["*set", "#B/000000000O+000000005U", "@`)i", "!"]
+        , ["@", ":`)i", "=364"]
+        , ["."]
+        ]
+    in
+    property $ do
+        (set0, set1, set2) <-
+            evalEither $
+            runNetworkSim $
+            runReplicaSim (applicationSpecific 350) $
+            runExceptT $ do
+                set0 <- newObject $ ORSet @Int64 []
+                (set1, set2) <- (`evalStateT` set0) $ do
+                    ORSet.addValue 364
+                    set1 <- get
+                    ORSet.removeValue 364
+                    set2 <- get
+                    pure (set1, set2)
+                pure (set0, set1, set2)
+        set0expect === prep set0
+        set1expect === prep set1
+        set2expect === prep set2

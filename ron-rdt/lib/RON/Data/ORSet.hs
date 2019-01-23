@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -13,8 +14,8 @@ module RON.Data.ORSet
     , addNewRef
     , addRef
     , addValue
-    -- , removeRef
-    -- , removeValue
+    , removeRef
+    , removeValue
     ) where
 
 import qualified Data.Map.Strict as Map
@@ -22,9 +23,9 @@ import qualified Data.Map.Strict as Map
 import           RON.Data.Internal
 import           RON.Error (MonadE)
 import           RON.Event (ReplicaClock, getEventUuid)
-import           RON.Types (Object (Object), Op (Op), StateChunk (StateChunk),
-                            UUID, objectFrame, objectId, opEvent, opPayload,
-                            opRef, stateBody)
+import           RON.Types (Atom, Object (Object), Op (Op),
+                            StateChunk (StateChunk), UUID, objectFrame,
+                            objectId, opEvent, opPayload, opRef, stateBody)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -120,11 +121,11 @@ add :: (ReplicatedAsObject a, ReplicatedAsPayload b, ReplicaClock m, MonadE m)
 add item = do
     obj@Object{..} <- get
     StateChunk{..} <- getObjectStateChunk obj
-    e <- getEventUuid
+    newVersion <- getEventUuid
     let p = toPayload item
-    let newOp = Op e Zero p
+    let newOp = Op newVersion Zero p
     let chunk' = stateBody ++ [newOp]
-    let state' = StateChunk e chunk'
+    let state' = StateChunk newVersion chunk'
     put Object
         {objectFrame = Map.insert (setType, objectId) state' objectFrame, ..}
 
@@ -150,13 +151,41 @@ addNewRef item = do
     modify' $ \Object{..} -> Object{objectFrame = objectFrame <> itemFrame, ..}
     addRef itemObj
 
--- removeBy :: ([Atom] -> Bool) -> StateT (Object (ORSet a)) m ()
--- removeBy = undefined
+-- | XXX Internal. Common implementation of 'removeValue' and 'removeRef'.
+removeBy
+    :: (ReplicatedAsObject (orset a), MonadE m, ReplicaClock m)
+    => ([Atom] -> Bool) -> StateT (Object (orset a)) m ()
+removeBy isTarget = do
+    obj@Object{..} <- get
+    StateChunk{..} <- getObjectStateChunk obj
+    let opMap = Map.fromListWith (maxOn opRef) stateBody
+    let targetOps =
+            [ op
+            | op@Op{opRef, opPayload} <- stateBody
+            , opRef == Zero  -- is alive
+            , isTarget opPayload
+            ]
+    case targetOps of
+        [] -> pure ()
+        _  -> do
+            newVersion@tombstone <- getEventUuid
+            let newOps = map (\op -> op{opRef = tombstone}) targetOps
+            let chunk' = stateBody ++ newOps
+            let state' = StateChunk newVersion chunk'
+            put Object
+                { objectFrame =
+                    Map.insert (setType, objectId) state' objectFrame
+                , ..
+                }
 
--- -- | Remove an atomic value from the OR-Set
--- removeValue :: ReplicatedAsPayload a => a -> StateT (Object (ORSet a)) m ()
--- removeValue = removeBy . eqPayload
+-- | Remove an atomic value from the OR-Set
+removeValue
+    :: (ReplicatedAsPayload a, MonadE m, ReplicaClock m)
+    => a -> StateT (Object (ORSet a)) m ()
+removeValue = removeBy . eqPayload
 
--- -- | Remove an object reference from the OR-Set
--- removeRef :: Object a -> StateT (Object (ObjectORSet a)) m ()
--- removeRef = removeBy . eqRef
+-- | Remove an object reference from the OR-Set
+removeRef
+    :: (ReplicatedAsObject a, MonadE m, ReplicaClock m)
+    => Object a -> StateT (Object (ObjectORSet a)) m ()
+removeRef = removeBy . eqRef
