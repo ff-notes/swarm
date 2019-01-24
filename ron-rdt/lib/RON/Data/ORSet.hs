@@ -158,20 +158,23 @@ removeBy
 removeBy isTarget = do
     obj@Object{..} <- get
     StateChunk{..} <- getObjectStateChunk obj
-    let opMap = Map.fromListWith (maxOn opRef) stateBody
-    let targetOps =
-            [ op
-            | op@Op{opRef, opPayload} <- stateBody
+    let state0@(ORSetRaw opMap) = stateFromChunk stateBody
+    let targetEvents =
+            [ opEvent
+            | Op{..} <- toList opMap
             , opRef == Zero  -- is alive
             , isTarget opPayload
             ]
-    case targetOps of
+    case targetEvents of
         [] -> pure ()
         _  -> do
-            newVersion@tombstone <- getEventUuid
-            let newOps = map (\op -> op{opRef = tombstone}) targetOps
-            let chunk' = stateBody ++ newOps
-            let state' = StateChunk newVersion chunk'
+            tombstone <- getEventUuid
+            let patch =
+                    [ Op{opEvent = tombstone, opRef = event, opPayload = []}
+                    | event <- targetEvents
+                    ]
+            let chunk' = state0 <> stateFromChunk patch
+            let state' = stateToChunk chunk'
             put Object
                 { objectFrame =
                     Map.insert (setType, objectId) state' objectFrame
