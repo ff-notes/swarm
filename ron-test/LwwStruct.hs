@@ -135,7 +135,7 @@ prop_lwwStruct = property $ do
             str3Value <- str3_read
             str3_assign "206"
             set4_zoom $
-                ORSet.addNewRef
+                void $ ORSet.addNewRef
                     Example1
                         { int1 = 135
                         , str2 = "136"

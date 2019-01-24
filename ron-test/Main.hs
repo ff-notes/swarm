@@ -28,8 +28,9 @@ import qualified RON.Base64 as Base64
 import qualified RON.Binary.Parse as RB
 import qualified RON.Binary.Serialize as RB
 import           RON.Data (newObject)
-import           RON.Data.ORSet (ORSet (ORSet))
+import           RON.Data.ORSet (ORSet (ORSet), ObjectORSet (ObjectORSet))
 import qualified RON.Data.ORSet as ORSet
+import           RON.Data.RGA (RgaString)
 import qualified RON.Data.RGA as RGA
 import           RON.Event (CalendarEvent (CalendarEvent), Naming (TrieForked),
                             ReplicaId (ReplicaId), applicationSpecific,
@@ -369,6 +370,47 @@ prop_ORSet = let
                     ORSet.addValue 364
                     set1 <- get
                     ORSet.removeValue 364
+                    set2 <- get
+                    pure (set1, set2)
+                pure (set0, set1, set2)
+        set0expect === prep set0
+        set1expect === prep set1
+        set2expect === prep set2
+
+prop_ObjectORSet = let
+    prep = map BSLC.words . BSLC.lines . RT.serializeStateFrame . objectFrame
+    set0expect = [["*set", "#B/000000000O+000000005U", "@`", "!"], ["."]]
+    set1expect =
+        [ ["*rga", "#B/000000000q+000000005U", "@`)Z", "!"]
+            , ["@)X", "'3'"]
+            , ["@)Y", "'9'"]
+            , ["@)Z", "'9'"]
+        , ["*set", "#)O", "@]1P", "!"]
+            , ["@", ">)q"]
+        , ["."]
+        ]
+    set2expect =
+        [ ["*rga", "#B/000000000q+000000005U", "@`)Z", "!"]
+            , ["@)X", "'3'"]
+            , ["@)Y", "'9'"]
+            , ["@)Z", "'9'"]
+        , ["*set", "#)O", "@]1t", "!"]
+            , [":`)P"]
+        , ["."]
+        ]
+    in
+    property $ do
+        (set0, set1, set2) <-
+            evalEither $
+            runNetworkSim $
+            runReplicaSim (applicationSpecific 350) $
+            runExceptT $ do
+                set0 <- newObject $ ObjectORSet @RgaString []
+                rga0 <- RGA.newFromText "399"
+                (set1, set2) <- (`evalStateT` set0) $ do
+                    ORSet.addRef rga0
+                    set1 <- get
+                    ORSet.removeRef rga0
                     set2 <- get
                     pure (set1, set2)
                 pure (set0, set1, set2)
