@@ -24,7 +24,7 @@ import           RON.Util.Word (Word60, ls60, safeCast, word60add)
 -- | Lamport clock simulation. Key is 'ReplicaId'.
 -- Non-present value is equivalent to (0, initial).
 newtype NetworkSimT m a = NetworkSim (StateT (HashMap ReplicaId Word60) m a)
-    deriving (Applicative, Functor, Monad)
+    deriving (Applicative, Functor, Monad, MonadError e)
 
 instance MonadTrans NetworkSimT where
     lift = NetworkSim . lift
@@ -33,7 +33,7 @@ type NetworkSim = NetworkSimT Identity
 
 -- | ReplicaSim inside Lamport clock simulation.
 newtype ReplicaSimT m a = ReplicaSim (ReaderT ReplicaId (NetworkSimT m) a)
-    deriving (Applicative, Functor, Monad)
+    deriving (Applicative, Functor, Monad, MonadError e)
 
 type ReplicaSim = ReplicaSimT Identity
 

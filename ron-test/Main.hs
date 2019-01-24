@@ -1,4 +1,5 @@
 {-# OPTIONS -Wno-missing-signatures #-}
+{-# OPTIONS -Wno-orphans #-}
 
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -12,8 +13,8 @@ import qualified Data.ByteString.Lazy.Char8 as BSLC
 import           Data.Maybe (fromJust)
 import           GHC.Stack (withFrozenCallStack)
 import           Hedgehog (Gen, MonadTest, Property, PropertyT, annotate,
-                           annotateShow, evalEither, forAll, property, tripping,
-                           (===))
+                           annotateShow, evalEither, evalExceptT, forAll,
+                           liftTest, property, tripping, (===))
 import qualified Hedgehog.Gen as Gen
 import           Hedgehog.Internal.Property (failWith)
 import qualified Hedgehog.Range as Range
@@ -36,7 +37,9 @@ import           RON.Event (CalendarEvent (CalendarEvent), Naming (TrieForked),
                             ReplicaId (ReplicaId), applicationSpecific,
                             decodeEvent, encodeEvent, fromCalendarEvent,
                             mkCalendarDateTime)
-import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
+import           RON.Event.Simulation (ReplicaSimT, runNetworkSim,
+                                       runNetworkSimT, runReplicaSim,
+                                       runReplicaSimT)
 import qualified RON.Text as RT
 import qualified RON.Text.Parse as RT
 import qualified RON.Text.Serialize as RT
@@ -350,70 +353,61 @@ instance Show (ShowAs a) where
 
 prop_ORSet = let
     prep = map BSLC.words . BSLC.lines . RT.serializeStateFrame . objectFrame
-    set0expect = [["*set", "#B/000000000O+000000005U", "@`", "!"], ["."]]
+    set0expect = [["*set", "#B/000000000d+000000005j", "@`", "!"], ["."]]
     set1expect =
-        [ ["*set", "#B/000000000O+000000005U", "@`)V", "!"]
-        , ["@", "=364"]
+        [ ["*set", "#B/000000000d+000000005j", "@`]1F", "!"]
+        , ["@", "=370"]
         , ["."]
         ]
     set2expect =
-        [["*set", "#B/000000000O+000000005U", "@`)i", "!"], [":`)V"], ["."]]
+        [["*set", "#B/000000000d+000000005j", "@`]1p", "!"], [":`)F"], ["."]]
     in
-    property $ do
-        (set0, set1, set2) <-
-            evalEither $
-            runNetworkSim $
-            runReplicaSim (applicationSpecific 350) $
-            runExceptT $ do
-                set0 <- newObject $ ORSet @Int64 []
-                (set1, set2) <- (`evalStateT` set0) $ do
-                    ORSet.addValue 364
-                    set1 <- get
-                    ORSet.removeValue 364
-                    set2 <- get
-                    pure (set1, set2)
-                pure (set0, set1, set2)
+    property $ evalExceptT $
+    runNetworkSimT $ runReplicaSimT (applicationSpecific 366) $ do
+        set0 <- newObject $ ORSet @Int64 []
         set0expect === prep set0
-        set1expect === prep set1
-        set2expect === prep set2
+        (`evalStateT` set0) $ do
+            ORSet.addValue 370
+            set1 <- get
+            set1expect === prep set1
+            ORSet.removeValue 370
+            set2 <- get
+            set2expect === prep set2
 
 prop_ObjectORSet = let
     prep = map BSLC.words . BSLC.lines . RT.serializeStateFrame . objectFrame
-    set0expect = [["*set", "#B/000000000O+000000005U", "@`", "!"], ["."]]
+    set0expect = [["*set", "#B/000000000X+000000006G", "@`", "!"], ["."]]
     set1expect =
-        [ ["*rga", "#B/000000000q+000000005U", "@`)Z", "!"]
-            , ["@)X", "'3'"]
-            , ["@)Y", "'9'"]
-            , ["@)Z", "'9'"]
-        , ["*set", "#)O", "@]1P", "!"]
-            , ["@", ">)q"]
+        [ ["*rga", "#B/000000001B+000000006G", "@`]0z", "!"]
+            , ["@)x", "'4'"]
+            , ["@)y", "'0'"]
+            , ["@)z", "'3'"]
+        , ["*set", "#]0X", "@]1a", "!"]
+            , ["@", ">]1B"]
         , ["."]
         ]
     set2expect =
-        [ ["*rga", "#B/000000000q+000000005U", "@`)Z", "!"]
-            , ["@)X", "'3'"]
-            , ["@)Y", "'9'"]
-            , ["@)Z", "'9'"]
-        , ["*set", "#)O", "@]1t", "!"]
-            , [":`)P"]
+        [ ["*rga", "#B/000000001B+000000006G", "@`]0z", "!"]
+            , ["@)x", "'4'"]
+            , ["@)y", "'0'"]
+            , ["@)z", "'3'"]
+        , ["*set", "#]0X", "@]1l", "!"]
+            , [":`)a"]
         , ["."]
         ]
     in
-    property $ do
-        (set0, set1, set2) <-
-            evalEither $
-            runNetworkSim $
-            runReplicaSim (applicationSpecific 350) $
-            runExceptT $ do
-                set0 <- newObject $ ObjectORSet @RgaString []
-                rga0 <- RGA.newFromText "399"
-                (set1, set2) <- (`evalStateT` set0) $ do
-                    ORSet.addRef rga0
-                    set1 <- get
-                    ORSet.removeRef rga0
-                    set2 <- get
-                    pure (set1, set2)
-                pure (set0, set1, set2)
+    property $ evalExceptT $
+    runNetworkSimT $ runReplicaSimT (applicationSpecific 400) $ do
+        set0 <- newObject $ ObjectORSet @RgaString []
         set0expect === prep set0
-        set1expect === prep set1
-        set2expect === prep set2
+        rga0 <- RGA.newFromText "403"
+        (`evalStateT` set0) $ do
+            ORSet.addRef rga0
+            set1 <- get
+            set1expect === prep set1
+            ORSet.removeRef rga0
+            set2 <- get
+            set2expect === prep set2
+
+instance MonadTest m => MonadTest (ReplicaSimT m) where
+    liftTest = lift . liftTest
