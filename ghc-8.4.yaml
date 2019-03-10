@@ -6,6 +6,7 @@ packages:
   - ron-schema
   - ron-storage
   - ron-test
+  - swarm
   - examples
 
 extra-deps:
@@ -14,6 +15,3 @@ extra-deps:
 
   # hedn:
   - megaparsec-7.0.4@sha256:a7397151601cbe6b8f831f8bdad1a10118dcd6d9a7ee50d6bbdcfbd1181b4ba2
-
-  # prelude:
-  - base-noprelude-4.11.1.0@sha256:f85e44cb50a0d0b2320baf9677d764beb1d247a3c15d1b97e3404ff7e7efd00b

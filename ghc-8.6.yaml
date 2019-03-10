@@ -6,6 +6,7 @@ packages:
   - ron-schema
   - ron-storage
   - ron-test
+  - swarm
   - examples
 
 extra-deps:
