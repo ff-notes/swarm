@@ -10,6 +10,7 @@ import qualified Data.ByteString.Char8 as BSC
 import           Data.ByteString.Lazy (fromStrict)
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 import           Data.Maybe (fromJust)
+import qualified Data.Text as Text
 import           Hedgehog (Gen, MonadTest, Property, PropertyT, annotate,
                            annotateShow, evalExceptT, forAll, property,
                            tripping, (===))
@@ -321,6 +322,35 @@ prop_RGA_delete_deleted = let
             RGA.editText "help"
             rga2 <- get
             rga2expect === prep rga2
+
+-- TODO(2019-04-17, #, cblp) RGA objects are not random enough. Try generate
+-- RGAs from a series of ops.
+prop_RGA_insertAtBegin = property $ do
+    suffix   <- forAll Gen.shortText
+    prefix   <- forAll Gen.shortText
+    replica1 <- forAll Gen.replicaId
+    replica2 <- forAll Gen.replicaId
+    evalExceptT $ runNetworkSimT $ do
+        rga1 <- runReplicaSimT replica1 $ RGA.newFromText suffix
+        rga2 <- runReplicaSimT replica2 $
+            (`execStateT` rga1) $ RGA.insertTextAtBegin prefix
+        Right (prefix <> suffix) === RGA.getText rga2
+
+prop_RGA_insertAfter = property $ do
+    prefix   <- forAll Gen.shortText
+    inset    <- forAll Gen.shortText
+    suffix   <- forAll Gen.shortText
+    replica1 <- forAll Gen.replicaId
+    replica2 <- forAll Gen.replicaId
+    evalExceptT $ runNetworkSimT $ do
+        rga1 <- runReplicaSimT replica1 $ RGA.newFromText $ prefix <> suffix
+        rga1indices <- RGA.getAliveIndices rga1
+        annotateShow rga1indices
+        let pos = rga1indices !! (Text.length prefix - 1)
+        annotateShow pos
+        rga2 <- runReplicaSimT replica2 $
+            (`execStateT` rga1) $ RGA.insertText inset pos
+        Right (prefix <> inset <> suffix) === RGA.getText rga2
 
 prop_base64_isLetter = property $ do
     c <- forAll $ Gen.word8 Range.constantBounded

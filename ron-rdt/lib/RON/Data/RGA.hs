@@ -16,8 +16,15 @@ module RON.Data.RGA
     , RgaString
     , edit
     , editText
+    , getAliveIndices
     , getList
     , getText
+    , insert
+    , insertAfter
+    , insertAtBegin
+    , insertText
+    , insertTextAfter
+    , insertTextAtBegin
     , newFromList
     , newFromText
     , rgaType
@@ -31,7 +38,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
 import           RON.Data.Internal
-import           RON.Error (MonadE)
+import           RON.Error (MonadE, throwErrorText)
 import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid,
                             getEventUuids)
 import           RON.Types (Object (..), Op (..), StateChunk (..), UUID)
@@ -347,6 +354,8 @@ edit newItems = do
     advanceToUuid stateVersion
 
     let newItems' = [Op Zero Zero $ toPayload item | item <- newItems]
+        -- TODO(2019-04-17, #, cblp) replace 'toPayload' with 'newRon' and
+        -- relax constraint on 'a' from 'ReplicatedAsPayload' to 'Replicated'
     let diff = getGroupedDiffBy eqAliveOnPayload stateBody newItems'
     (stateBody', Last lastEvent) <- runWriterT . fmap fold . for diff $ \case
         First removed -> for removed $ \case
@@ -399,6 +408,17 @@ newFromList = newObject . RGA
 newFromText :: ReplicaClock m => Text -> m (Object RgaString)
 newFromText = newFromList . Text.unpack
 
+getAliveIndices :: MonadE m => Object (RGA a) -> m [UUID]
+getAliveIndices obj = do
+    StateChunk{stateBody} <- getObjectStateChunk obj
+    let mItems =
+            [ case refId of
+                Zero -> Just opId
+                _    -> Nothing
+            | Op{opId, refId} <- stateBody
+            ]
+    pure $ catMaybes mItems
+
 -- | Read elements from RGA
 getList :: (Replicated a, MonadE m) => Object (RGA a) -> m [a]
 getList = fmap coerce . getObject
@@ -406,3 +426,70 @@ getList = fmap coerce . getObject
 -- | Read characters from 'RgaString'
 getText :: MonadE m => Object RgaString -> m Text
 getText = fmap Text.pack . getList
+
+-- | Insert a sequence of elements after the specified position.
+-- Position is identified by 'UUID'. 'Nothing' means the beginning.
+insert
+    :: (Replicated a, MonadE m, MonadState (Object (RGA a)) m, ReplicaClock m)
+    => [a]
+    -> Maybe UUID  -- ^ position
+    -> m ()
+insert [] _ = pure ()
+insert items mPosition = do
+    obj@Object{id, frame} <- get
+    stateChunk@StateChunk{stateVersion, stateBody} <- getObjectStateChunk obj
+    advanceToUuid stateVersion
+
+    vertexIds <- getEventUuids $ ls60 $ genericLength items
+    (ops, newFrame) <- runWriterT $
+        for (zip items vertexIds) $ \(item, vertexId) -> do
+            payload <- newRon item
+            pure $ Op vertexId Zero payload
+
+    let stateVersion' = maximumDef stateVersion $ map opId ops
+    stateBody' <- case mPosition of
+        Nothing -> pure $ ops <> stateBody
+        Just position -> findAndInsertAfter position ops stateBody
+    let stateChunk' =
+            stateChunk{stateVersion = stateVersion', stateBody = stateBody'}
+    put obj{frame = Map.insert id stateChunk' frame <> newFrame}
+  where
+    findAndInsertAfter pos newOps = go where
+        go = \case
+            []                -> throwErrorText "Position not found"
+            op@Op{opId} : ops
+                | opId == pos -> pure $ op : newOps ++ ops
+                | otherwise   -> (op :) <$> go ops
+
+insertAtBegin
+    :: (Replicated a, MonadE m, MonadState (Object (RGA a)) m, ReplicaClock m)
+    => [a] -> m ()
+insertAtBegin items = insert items Nothing
+
+insertAfter
+    :: (Replicated a, MonadE m, MonadState (Object (RGA a)) m, ReplicaClock m)
+    => [a]
+    -> UUID  -- ^ position
+    -> m ()
+insertAfter items = insert items . Just
+
+-- | Insert a text after the specified position.
+-- Position is identified by 'UUID'. 'Nothing' means the beginning.
+insertText
+    :: (ReplicaClock m, MonadE m, MonadState (Object RgaString) m)
+    => Text
+    -> Maybe UUID  -- ^ position
+    -> m ()
+insertText = insert . Text.unpack
+
+insertTextAtBegin
+    :: (ReplicaClock m, MonadE m, MonadState (Object RgaString) m)
+    => Text -> m ()
+insertTextAtBegin text = insertText text Nothing
+
+insertTextAfter
+    :: (ReplicaClock m, MonadE m, MonadState (Object RgaString) m)
+    => Text
+    -> UUID  -- ^ position
+    -> m ()
+insertTextAfter text = insertText text . Just
