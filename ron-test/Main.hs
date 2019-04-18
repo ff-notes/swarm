@@ -327,8 +327,7 @@ prop_RGA_delete_deleted = let
 -- generate RGAs from a series of ops.
 prop_RGA_insertAfter = property $ do
     (prefix, inset, suffix) <- forAll $ replicate3 Gen.shortText
-    replica1 <- forAll Gen.replicaId
-    replica2 <- forAll Gen.replicaId
+    (replica1, replica2)    <- forAll $ replicate2 Gen.replicaId
     evalExceptT $ runNetworkSimT $ do
         rga1 <- runReplicaSimT replica1 $ RGA.newFromText $ prefix <> suffix
         rga1indices <- RGA.getAliveIndices rga1
