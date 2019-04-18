@@ -12,6 +12,8 @@ module Prelude (
     maxOn,
     minOn,
     note,
+    replicate2,
+    replicate3,
     show,
     whenJust,
     (!!),
@@ -162,6 +164,12 @@ minOn f x y = if f x < f y then x else y
 
 note :: e -> Maybe a -> Either e a
 note e = maybe (Left e) Right
+
+replicate2 :: Applicative m => m a -> m (a, a)
+replicate2 ma = (,) <$> ma <*> ma
+
+replicate3 :: Applicative m => m a -> m (a, a, a)
+replicate3 ma = (,,) <$> ma <*> ma <*> ma
 
 show :: (Show a, IsString s) => a -> s
 show = fromString . Text.Show.show

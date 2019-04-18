@@ -323,23 +323,10 @@ prop_RGA_delete_deleted = let
             rga2 <- get
             rga2expect === prep rga2
 
--- TODO(2019-04-17, #, cblp) RGA objects are not random enough. Try generate
--- RGAs from a series of ops.
-prop_RGA_insertAtBegin = property $ do
-    prefix   <- forAll Gen.shortText
-    suffix   <- forAll Gen.shortText
-    replica1 <- forAll Gen.replicaId
-    replica2 <- forAll Gen.replicaId
-    evalExceptT $ runNetworkSimT $ do
-        rga1 <- runReplicaSimT replica1 $ RGA.newFromText suffix
-        rga2 <- runReplicaSimT replica2 $
-            (`execStateT` rga1) $ RGA.insertTextAtBegin prefix
-        Right (prefix <> suffix) === RGA.getText rga2
-
+-- TODO(2019-04-17, #60, cblp) RGA objects are not random enough. Try to
+-- generate RGAs from a series of ops.
 prop_RGA_insertAfter = property $ do
-    prefix   <- forAll Gen.shortText
-    inset    <- forAll Gen.shortText
-    suffix   <- forAll Gen.shortText
+    (prefix, inset, suffix) <- forAll $ replicate3 Gen.shortText
     replica1 <- forAll Gen.replicaId
     replica2 <- forAll Gen.replicaId
     evalExceptT $ runNetworkSimT $ do

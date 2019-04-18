@@ -354,7 +354,7 @@ edit newItems = do
     advanceToUuid stateVersion
 
     let newItems' = [Op Zero Zero $ toPayload item | item <- newItems]
-        -- TODO(2019-04-17, #, cblp) replace 'toPayload' with 'newRon' and
+        -- TODO(2019-04-17, #59, cblp) replace 'toPayload' with 'newRon' and
         -- relax constraint on 'a' from 'ReplicatedAsPayload' to 'Replicated'
     let diff = getGroupedDiffBy eqAliveOnPayload stateBody newItems'
     (stateBody', Last lastEvent) <- runWriterT . fmap fold . for diff $ \case
