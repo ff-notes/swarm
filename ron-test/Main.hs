@@ -326,8 +326,8 @@ prop_RGA_delete_deleted = let
 -- TODO(2019-04-17, #, cblp) RGA objects are not random enough. Try generate
 -- RGAs from a series of ops.
 prop_RGA_insertAtBegin = property $ do
-    suffix   <- forAll Gen.shortText
     prefix   <- forAll Gen.shortText
+    suffix   <- forAll Gen.shortText
     replica1 <- forAll Gen.replicaId
     replica2 <- forAll Gen.replicaId
     evalExceptT $ runNetworkSimT $ do
