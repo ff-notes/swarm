@@ -323,6 +323,14 @@ prop_RGA_delete_deleted = let
             rga2 <- get
             rga2expect === prep rga2
 
+prop_RGA_getAliveIndices = property $ do
+    text    <- forAll Gen.shortText
+    replica <- forAll Gen.replicaId
+    evalExceptT $ runNetworkSimT $ runReplicaSimT replica $ do
+        rga     <- RGA.newFromText text
+        indices <- RGA.getAliveIndices rga
+        Text.length text === length indices
+
 -- TODO(2019-04-17, #60, cblp) RGA objects are not random enough. Try to
 -- generate RGAs from a series of ops.
 prop_RGA_insertAfter = property $ do
