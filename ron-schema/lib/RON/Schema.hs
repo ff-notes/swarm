@@ -6,6 +6,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module RON.Schema (
+    Alias (..),
     CaseTransform (..),
     Declaration (..),
     Field (..),
@@ -38,7 +39,9 @@ data Stage = Parsed | Resolved
 
 type TypeName = Text
 
-data TypeExpr = Use TypeName | Apply TypeName [TypeExpr]
+data TypeExpr
+    = Use TypeName
+    | Apply TypeName [TypeExpr]
     deriving (Show)
 
 data TAtom = TAInteger | TAString
@@ -93,8 +96,11 @@ type family UseType (stage :: Stage) where
     UseType 'Parsed   = TypeExpr
     UseType 'Resolved = RonType
 
-data Declaration stage =
-    DEnum TEnum | DOpaque Opaque | DStructLww (StructLww stage)
+data Declaration stage
+    = DAlias     (Alias stage)
+    | DEnum       TEnum
+    | DOpaque     Opaque
+    | DStructLww (StructLww stage)
 deriving instance Show (UseType stage) => Show (Declaration stage)
 
 type family Schema (stage :: Stage) where
@@ -115,10 +121,13 @@ data Opaque = Opaque
     deriving (Show)
 
 opaqueObject :: Text -> OpaqueAnnotations -> RonType
-opaqueObject name = TOpaque . Opaque True name
+opaqueObject tyname = TOpaque . Opaque True tyname
 
 opaqueAtoms :: Text -> OpaqueAnnotations -> RonType
-opaqueAtoms name = TOpaque . Opaque False name
+opaqueAtoms tyname = TOpaque . Opaque False tyname
 
 opaqueAtoms_ :: Text -> RonType
-opaqueAtoms_ name = TOpaque $ Opaque False name defaultOpaqueAnnotations
+opaqueAtoms_ tyname = TOpaque $ Opaque False tyname defaultOpaqueAnnotations
+
+data Alias stage = Alias{name :: Text, target :: UseType stage}
+deriving instance Show (UseType stage) => Show (Alias stage)

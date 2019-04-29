@@ -58,6 +58,7 @@ prelude = Map.fromList
 instance FromEDN (Declaration 'Parsed) where
     parseEDN = withNoTag . withList $ \case
         func : args -> (`withSymbol'` func) $ \case
+            "alias"      -> DAlias     <$> parseList args
             "enum"       -> DEnum      <$> parseList args
             "opaque"     -> DOpaque    <$> parseList args
             "struct_lww" -> DStructLww <$> parseList args
@@ -106,6 +107,7 @@ rememberDeclaration decl = do
 
 declarationName :: Declaration stage -> TypeName
 declarationName = \case
+    DAlias     Alias    {name      } -> name
     DEnum      Enum     {enumName  } -> enumName
     DOpaque    Opaque   {opaqueName} -> opaqueName
     DStructLww StructLww{structName} -> structName
@@ -131,7 +133,8 @@ instance FromEDN (StructLww 'Parsed) where
                 typ  <- parseEDN typeAsTagged
                 Map.insert name (Field typ) <$> parseFields cont
             [f] ->
-                fail $ "field " ++ Text.unpack (renderText f) ++ " must have type"
+                fail $
+                "field " ++ Text.unpack (renderText f) ++ " must have type"
 
 instance FromEDN StructAnnotations where
     parseEDN = withNoTag . withList $ \annTaggedValues -> do
@@ -181,6 +184,7 @@ collectDeclarations = traverse_ rememberDeclaration
 
 validateTypeUses :: (MonadFail m, MonadState Env m) => Schema 'Parsed -> m ()
 validateTypeUses = traverse_ $ \case
+    DAlias     Alias{target}           -> validateExpr target
     DEnum      _                       -> pure ()
     DOpaque    _                       -> pure ()
     DStructLww StructLww{structFields} ->
@@ -204,6 +208,9 @@ evalSchema env = fst <$> userTypes' where
 
     evalDeclaration :: Declaration 'Parsed -> (Declaration 'Resolved, RonTypeF)
     evalDeclaration = \case
+        DAlias Alias{name, target} -> let
+            target' = evalType target
+            in (DAlias Alias{name, target = target'}, Type0 target')
         DEnum   t -> (DEnum t, Type0 $ TComposite $ TEnum t)
         DOpaque t -> (DOpaque t, Type0 $ TOpaque t)
         DStructLww StructLww{..} -> let
@@ -220,9 +227,9 @@ evalSchema env = fst <$> userTypes' where
         ?:  error "type is validated but not found"
 
     evalType = \case
-        Use   typ      -> case getType typ of
-            Type0 t0 -> t0
-            Type1 _  -> error "type arity mismatch"
+        Use typ        -> case getType typ of
+            Type0 t0   -> t0
+            Type1 _    -> error "type arity mismatch"
         Apply typ args -> applyType typ $ evalType <$> args
 
     applyType name args = case getType name of
@@ -232,3 +239,13 @@ evalSchema env = fst <$> userTypes' where
             _   -> error
                 $   Text.unpack name ++ " expects 1 argument, got "
                 ++  show (length args)
+
+instance FromEDN (Alias 'Parsed) where
+    parseEDN = withNoTag . withList $ \case
+        [nameSym, targetVal] -> do
+            name   <- parseSymbol' nameSym
+            target <- parseEDN targetVal
+            pure Alias{name, target}
+        _ -> fail
+            "Expected declaration in the form\
+            \ (alias <name:symbol> <target:type>)"

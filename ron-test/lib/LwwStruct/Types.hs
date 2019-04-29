@@ -3,7 +3,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module LwwStruct.Types (
-    Example1 (..),
+    Example51 (..),
     int1_assign,
     int1_read,
     int1_zoom,
@@ -29,7 +29,7 @@ module LwwStruct.Types (
     tfpatInnerField_assign,
     tfpatInnerField_read,
     tfpatInnerField_zoom,
-    TestEnum (..),
+    TestEnum67 (..),
 ) where
 
 import           RON.Prelude
@@ -48,12 +48,12 @@ instance ReplicatedAsPayload TestOpaque where
 [mkReplicated|
     (opaque atoms TestOpaque)
 
-    (struct_lww Example1
+    (struct_lww Example51
         int1 Integer
         str2 RgaString
         str3 String
-        set4 (ORSet Example1)
-        opt5 (Option Example1)
+        set4 TestAlias69
+        opt5 (Option Example51)
         opt6 (Option Integer))
 
     (struct_lww TestFieldPrefix
@@ -64,8 +64,10 @@ instance ReplicatedAsPayload TestOpaque where
         #haskell {field_prefix "tfpat", field_case title}
         innerField Integer)
 
-    (enum TestEnum TEItem1 TEItem2)
+    (enum TestEnum67 TEItem1 TEItem2)
+
+    (alias TestAlias69 (ORSet Example51))
 |]
 
-deriving instance Eq   Example1
-deriving instance Show Example1
+deriving instance Eq   Example51
+deriving instance Show Example51

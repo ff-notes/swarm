@@ -57,6 +57,7 @@ mkReplicated = QuasiQuoter{quoteDec, quoteExp = e, quotePat = e, quoteType = e}
 mkReplicated' :: HasCallStack => Schema 'Resolved -> TH.DecsQ
 mkReplicated' = fmap fold . traverse fromDecl where
     fromDecl decl = case decl of
+        DAlias     _ -> pure []
         DEnum      e -> mkEnum e
         DOpaque    _ -> pure []
         DStructLww s -> mkReplicatedStructLww s

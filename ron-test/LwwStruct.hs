@@ -20,12 +20,12 @@ import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
 import           RON.Text (parseObject, serializeObject)
 import           RON.Util (ByteStringL)
 
-import           LwwStruct.Types (Example1 (..), int1_assign, opt5_read,
+import           LwwStruct.Types (Example51 (..), int1_assign, opt5_read,
                                   opt6_assign, opt6_read, set4_zoom, str2_zoom,
                                   str3_assign, str3_read)
 
-example0 :: Example1
-example0 = Example1
+example0 :: Example51
+example0 = Example51
     { int1 = 275
     , str2 = "275"
     , str3 = "190"
@@ -94,12 +94,12 @@ ex4expect = [i|
     .
     |]
 
-example4expect :: Example1
-example4expect = Example1
+example4expect :: Example51
+example4expect = Example51
     { int1 = 166
     , str2 = "145"
     , str3 = "206"
-    , set4 = [Example1
+    , set4 = [Example51
         { int1 = 135
         , str2 = "136"
         , str3 = "137"
@@ -138,7 +138,7 @@ prop_lwwStruct = property $ do
             str3_assign "206"
             set4_zoom $
                 void $ ORSet.addNewRef
-                    Example1
+                    Example51
                         { int1 = 135
                         , str2 = "136"
                         , str3 = "137"
