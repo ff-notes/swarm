@@ -6,6 +6,8 @@ and this project adheres to
 [Compatible Versioning](https://github.com/staltz/comver).
 
 ## [Unreleased]
+### Added
+- Schema language: `alias` declaration.
 
 ## [0.6] - 2019-04-25
 ### Added

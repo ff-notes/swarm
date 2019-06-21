@@ -39,9 +39,7 @@ data Stage = Parsed | Resolved
 
 type TypeName = Text
 
-data TypeExpr
-    = Use TypeName
-    | Apply TypeName [TypeExpr]
+data TypeExpr = Use TypeName | Apply TypeName [TypeExpr]
     deriving (Show)
 
 data TAtom = TAInteger | TAString
