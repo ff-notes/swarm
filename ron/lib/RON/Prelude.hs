@@ -25,7 +25,7 @@ import           Control.Applicative as X (Alternative, Applicative, liftA2,
                                            (<*), (<*>), (<|>))
 import           Control.Exception as X (Exception, catch, evaluate, throwIO)
 import           Control.Monad as X (Monad, filterM, guard, unless, void, when,
-                                     (<=<), (=<<), (>=>), (>>=))
+                                     (<=<), (=<<), (>=>), (>>=), (>>))
 import           Control.Monad.Except as X (ExceptT, MonadError, catchError,
                                             liftEither, runExceptT, throwError)
 import           Control.Monad.Fail as X (MonadFail, fail)

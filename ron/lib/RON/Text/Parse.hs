@@ -23,12 +23,13 @@ module RON.Text.Parse
 import           RON.Prelude hiding (takeWhile)
 
 import           Attoparsec.Extra (Parser, char, endOfInputEx, isSuccessful,
-                                   label, manyTill, parseOnlyL, satisfy, (<+>),
-                                   (??))
+                                   label, manyTill, parseOnlyL, satisfy,
+                                   unambiguousDouble, (<+>), (??))
 import qualified Data.Aeson as Json
 import           Data.Attoparsec.ByteString (takeWhile1)
 import           Data.Attoparsec.ByteString.Char8 (anyChar, decimal, double,
-                                                   signed, skipSpace, takeWhile)
+                                                   peekChar, signed, skipSpace,
+                                                   takeWhile)
 import           Data.Bits (complement, shiftL, shiftR, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -180,15 +181,11 @@ uuid11 = label "UUID-RON-11-letter-value" $ do
     rawX <- base64word 11
     guard $ BS.length rawX == 11
     x <- Base64.decode64 rawX ?? fail "Base64.decode64"
-    skipSpace
     rawUuidVersion <- optional pUuidVersion
-    rawOrigin <- optional $ base64word $ maybe 11 (const 10) rawUuidVersion
-    y <- case (rawUuidVersion, BS.length <$> rawOrigin) of
-        (Nothing, Just 11) ->
-            case rawOrigin of
-                Nothing     -> pure 0
-                Just origin -> Base64.decode64 origin ?? fail "Base64.decode64"
+    y <- case rawUuidVersion of
+        Nothing -> pure 0
         _ -> do
+            rawOrigin <- optional $ base64word $ maybe 11 (const 10) rawUuidVersion
             origin <- case rawOrigin of
                 Nothing     -> pure $ ls60 0
                 Just origin -> Base64.decode60 origin ?? fail "Base64.decode60"
@@ -197,13 +194,30 @@ uuid11 = label "UUID-RON-11-letter-value" $ do
 
 data UuidZipBase = PrevOpSameKey | SameOpPrevUuid
 
+uuidZip' :: Parser UUID
+uuidZip' = label "UUID-zip'" $ do
+    rawVariety <- optional pVariety
+    rawValue <- base64word60 10
+    rawUuidVersion <- optional pUuidVersion
+    rawOrigin <- case rawUuidVersion of
+                   Just _ -> optional $ base64word60 10
+                   Nothing -> pure Nothing
+
+    pure $ UUID.build UuidFields
+        { uuidVariety = fromMaybe b0000    rawVariety
+        , uuidValue   = rawValue
+        , uuidVariant = b00
+        , uuidVersion = fromMaybe b00      rawUuidVersion
+        , uuidOrigin  = fromMaybe (ls60 0) rawOrigin
+        }
+
+{-# DEPRECATED uuidZip "Deprecated since RON 2.1 ." #-}
 uuidZip :: UUID -> UUID -> UuidZipBase -> Parser UUID
 uuidZip prevOpSameKey sameOpPrevUuid defaultZipBase = label "UUID-zip" $ do
     changeZipBase <- isSuccessful $ char '`'
     rawVariety <- optional pVariety
     rawReuseValue <- optional pReuse
     rawValue <- optional $ base64word60 $ 10 - fromMaybe 0 rawReuseValue
-    skipSpace
     rawUuidVersion <- optional pUuidVersion
     rawReuseOrigin <- optional pReuse
     rawOrigin <- optional $ base64word60 $ 10 - fromMaybe 0 rawReuseOrigin
@@ -293,12 +307,12 @@ pVariety = label "variety" $ do
 
 pUuidVersion :: Parser Word2
 pUuidVersion = label "UUID-version" $
-    anyChar >>= \case
-        '$' -> pure b00
-        '%' -> pure b01
-        '+' -> pure b10
-        '-' -> pure b11
-        _   -> fail "not a UUID-version"
+    peekChar >>= \case
+        Just '$' -> anyChar >> pure b00
+        Just '%' -> anyChar >> pure b01
+        Just '+' -> anyChar >> pure b10
+        Just '-' -> anyChar >> pure b11
+        _        -> fail "not a UUID-version"
 
 payloadP :: UUID -> Parser [Atom]
 payloadP = label "payload" . go
@@ -320,9 +334,19 @@ atom prevUuid = skipSpace *> atom'
         char '^' *> skipSpace *> (AFloat   <$> double ) <+>
         char '=' *> skipSpace *> (AInteger <$> integer) <+>
         char '>' *> skipSpace *> (AUuid    <$> uuid'  ) <+>
-        AString                            <$> string
+        AString                            <$> string   <+>
+        atomUnprefixed prevUuid
     integer = signed decimal
     uuid'   = uuidAtom prevUuid
+
+atomUnprefixed :: UUID -> Parser Atom
+atomUnprefixed prevUuid =
+    AFloat                             <$> unambiguousDouble <+>
+    AInteger                           <$> integer <+>
+    AUuid                              <$> uuidUnzipped
+  where
+    integer = signed decimal
+    uuidUnzipped = uuid22 <+> uuid11 <+> uuidZip'
 
 uuidAtom :: UUID -> Parser UUID
 uuidAtom prev = uuid UUID.zero prev SameOpPrevUuid

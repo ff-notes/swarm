@@ -22,6 +22,7 @@ import           RON.Prelude
 import qualified Data.Aeson as Json
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Lazy.Char8 as BSLC
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 
 import           RON.Text.Serialize.UUID (serializeUuid, serializeUuidAtom,
@@ -124,11 +125,26 @@ serializeAtom a = evalState (serializeAtomZip a) zero
 -- | Serialize an atom with compression for UUID in stream context
 serializeAtomZip :: Atom -> State UUID ByteStringL
 serializeAtomZip = \case
-    AFloat   f -> pure $ BSLC.cons '^' $ BSLC.pack (show f)
-    AInteger i -> pure $ BSLC.cons '=' $ BSLC.pack (show i)
+    AFloat   f -> pure $ serializeFloatAtom f
+    AInteger i -> pure $ serializeIntegerAtom i
     AString  s -> pure $ serializeString s
-    AUuid    u ->
-        state $ \prev -> (BSLC.cons '>' $ serializeUuidAtom prev u, u)
+    AUuid    u -> serializeUuidAtom' u
+
+-- | Serialize a float atom.
+-- If unambiguous, i.e. contains a '.' or an 'e'/'E', the prefix '^' is skipped.
+serializeFloatAtom :: Double -> ByteStringL
+serializeFloatAtom f = let
+    s = show f
+    p = or [List.elem '.' s, List.elem 'e' s, List.elem 'E' s]
+    b = BSLC.pack s
+    in if p then b
+            else BSLC.cons '^' b
+
+-- | Serialize an integer atom.
+-- Since integers are always unambiguous, the prefix '=' is always skipped.
+serializeIntegerAtom :: Int64 -> ByteStringL
+serializeIntegerAtom i =
+    BSLC.cons '=' $ BSLC.pack (show i)
 
 -- | Serialize a string atom
 serializeString :: Text -> ByteStringL
@@ -144,6 +160,11 @@ serializeString =
             s1
         else
             s1 <> "\\'" <> escapeApostrophe (BSL.tail s2)
+
+serializeUuidAtom' :: UUID -> State UUID ByteStringL
+serializeUuidAtom' u =
+    -- FIXME: Check if uuid can be unambiguously serialized and if so, skip the prefix.
+    state $ \prev -> (BSLC.cons '>' $ serializeUuidAtom prev u, u)
 
 -- | Serialize a payload in stream context
 serializePayload

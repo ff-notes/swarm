@@ -182,7 +182,7 @@ prop_word60base64_roundtrip = property $ do
 
 prop_long_uuid = property $
     Right (UUID 0xa001083105187209 0x89669e8a6aaecb6e) ===
-    RT.parseUuid "A0123456789 8abcdefghij"
+    RT.parseUuid "A01234567898abcdefghij"
 
 prop_uuid_abbreviations = property $ do
     -- serialize
@@ -193,12 +193,9 @@ prop_uuid_abbreviations = property $ do
         Right aLed === RT.parseUuid (BSLC.pack e)
   where
     encodings =
-        [ "ALED0000000 00000000000"
-        , "ALED000000000000000000"
-        , "ALED0000000 0000000000"
+        [ "ALED000000000000000000"
         , "ALED0000000$0000000000"
         , "ALED0000000"
-        , "A/LED000 0"
         , "A/LED$0"
         , "A/LED"
         ]
