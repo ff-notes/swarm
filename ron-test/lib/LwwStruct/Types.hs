@@ -39,6 +39,7 @@ import           Data.Type.Equality ((:~:) (Refl))
 
 import           RON.Data (Replicated, ReplicatedAsPayload, encoding,
                            fromPayload, payloadEncoding, toPayload)
+import           RON.Data.ORSet (ORSet)
 import           RON.Schema.TH (mkReplicated)
 
 data Opaque49 = Opaque49
@@ -75,5 +76,5 @@ instance ReplicatedAsPayload Opaque49 where
 deriving instance Eq   Struct51
 deriving instance Show Struct51
 
-_check_Alias69 :: Alias69 :~: [Struct51]
+_check_Alias69 :: Alias69 :~: ORSet Struct51
 _check_Alias69 = Refl

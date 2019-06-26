@@ -69,6 +69,9 @@ instance Monad m => ReplicaClock (ReplicaSimT m) where
             Nothing      -> time
             Just current -> max time current
 
+instance MonadFail m => MonadFail (ReplicaSimT m) where
+    fail = lift . fail
+
 -- | Execute network simulation
 --
 -- Usage:

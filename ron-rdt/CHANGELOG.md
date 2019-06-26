@@ -18,6 +18,7 @@ and this project adheres to
   - `newObjectStateWith`
   - `runObjectState`
   - `runObjectState_`
+- Instances `Eq`, `Show` for `ORSet`.
 
 ### Changed
 - `ReplicatedAsObject.newObject` now has more specific type,

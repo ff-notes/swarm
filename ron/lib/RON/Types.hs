@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -ddump-deriv #-}
+
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -112,6 +114,7 @@ type StateFrame = Map UUID StateChunk
 
 -- | Reference to an object
 newtype Object a = Object UUID
+    deriving (Eq, Show)
 
 -- | Object accompanied with a frame
 data ObjectState a = ObjectState{uuid :: UUID, frame :: StateFrame}

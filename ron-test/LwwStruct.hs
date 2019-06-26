@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -8,10 +7,7 @@ import           RON.Prelude
 
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 import           Data.String.Interpolate.IsString (i)
-import           GHC.Stack (withFrozenCallStack)
-import           Hedgehog (MonadTest, Property, evalEither, evalExceptT,
-                           property, (===))
-import           Hedgehog.Internal.Property (failWith)
+import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 
 import           RON.Data (evalObjectState, execObjectState, getObject,
                            newObjectState)
@@ -124,7 +120,7 @@ prop_lwwStruct = property $ do
     prep ex1expect === prep ex1ser
 
     -- parse newly created object
-    ex2state <- evalEitherS $ parseObject oid ex1ser
+    ex2state <- evalEither $ parseObject oid ex1ser
     ex1state === ex2state
 
     -- decode newly created object
@@ -168,8 +164,3 @@ prop_lwwStruct = property $ do
 
   where
     prep = filter (not . null) . map BSLC.words . BSLC.lines
-
-evalEitherS :: (MonadTest m, HasCallStack) => Either String a -> m a
-evalEitherS = \case
-    Left  x -> withFrozenCallStack $ failWith Nothing x
-    Right a -> pure a

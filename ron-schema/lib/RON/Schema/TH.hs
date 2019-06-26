@@ -26,7 +26,7 @@ import           RON.Data (Replicated (..), ReplicatedAsPayload (..))
 import           RON.Error (throwErrorString)
 import           RON.Schema as X
 import qualified RON.Schema.EDN as EDN
-import           RON.Schema.TH.Common (mkNameT, mkViewType)
+import           RON.Schema.TH.Common (mkGuideType, mkNameT)
 import           RON.Schema.TH.Struct (mkReplicatedStructLww)
 import qualified RON.UUID as UUID
 
@@ -91,4 +91,4 @@ mkEnum Enum{enumName, enumItems} = do
 
 mkAlias :: Alias Resolved -> TH.DecsQ
 mkAlias Alias{name, target} =
-    (:[]) <$> TH.tySynD (mkNameT name) [] (mkViewType target)
+    (:[]) <$> TH.tySynD (mkNameT name) [] (mkGuideType target)

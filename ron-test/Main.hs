@@ -54,6 +54,7 @@ import qualified Gen
 import           HexDump (hexdump)
 import qualified LwwStruct
 import           Orphans ()
+import qualified ORSet
 import           Types (TestRecursiveORSet (TestRecursiveORSet), testRecSet,
                         testRecSet_zoom)
 
@@ -260,6 +261,8 @@ prop_ron_json_example = let
 lwwType = $(UUID.liftName "lww")
 
 prop_lwwStruct = LwwStruct.prop_lwwStruct
+
+prop_orSet = ORSet.prop_orSet
 
 prop_RGA_edit_idempotency = property $ do
     textX <- forAll Gen.shortText

@@ -354,7 +354,7 @@ edit
         )
     => [a] -> m ()
 edit newItems =
-    modifyObjectStateChunk $ \chunk@StateChunk{stateBody} -> do
+    modifyObjectStateChunk_ $ \chunk@StateChunk{stateBody} -> do
         let newItems' = [Op Zero Zero $ toPayload item | item <- newItems]
             -- TODO(2019-04-17, #59, cblp) replace 'toPayload' with 'newRon' and
             -- relax constraint on 'a' from 'ReplicatedAsPayload' to
@@ -441,7 +441,7 @@ insert
     -> m ()
 insert []    _         = pure ()
 insert items mPosition =
-    modifyObjectStateChunk $ \chunk@StateChunk{stateVersion, stateBody} -> do
+    modifyObjectStateChunk_ $ \chunk@StateChunk{stateVersion, stateBody} -> do
         vertexIds <- getEventUuids $ ls60 $ genericLength items
         ops <-
             for (zip items vertexIds) $ \(item, vertexId) -> do
@@ -501,7 +501,7 @@ remove
 remove position =
     errorContext "RGA.remove" $
     errorContext ("position = " <> show position) $
-    modifyObjectStateChunk $ \chunk@StateChunk{stateBody} -> do
+    modifyObjectStateChunk_ $ \chunk@StateChunk{stateBody} -> do
         event <- getEventUuid
         stateBody' <- findAndTombstone event stateBody
         pure chunk{stateVersion = event, stateBody = stateBody'}

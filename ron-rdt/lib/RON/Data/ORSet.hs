@@ -9,26 +9,31 @@
 -- | Observed-Remove Set (OR-Set)
 module RON.Data.ORSet
     ( ORSet (..)
+    , ORSetItem (..)
     , ORSetRaw
     , addRef
     , addValue
+    , findAnyAlive
+    , findAnyAlive'
     , removeRef
     , removeValue
+    , zoom
     ) where
 
 import           RON.Prelude
 
 import qualified Data.Map.Strict as Map
 
-import           RON.Data.Internal (MonadObjectState, Reducible, Replicated,
-                                    ReplicatedAsObject, ReplicatedAsPayload,
-                                    encoding, eqPayload, eqRef, fromRon,
-                                    getObject, getObjectStateChunk,
-                                    mkStateChunk, modifyObjectStateChunk,
-                                    newObject, newRon, objectEncoding,
-                                    objectOpType, reducibleOpType,
-                                    stateFromChunk, stateToChunk)
-import           RON.Error (MonadE)
+import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
+                                    Replicated, ReplicatedAsObject,
+                                    ReplicatedAsPayload, encoding, eqPayload,
+                                    eqRef, fromRon, getObject,
+                                    getObjectStateChunk, mkStateChunk,
+                                    modifyObjectStateChunk_, newObject, newRon,
+                                    objectEncoding, objectOpType,
+                                    reducibleOpType, stateFromChunk,
+                                    stateToChunk)
+import           RON.Error (MonadE, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
@@ -73,6 +78,7 @@ setType = $(UUID.liftName "set")
 
 -- | Type-directing wrapper for typed OR-Set
 newtype ORSet a = ORSet [a]
+    deriving (Eq, Show)
 
 instance Replicated a => Replicated (ORSet a) where
     encoding = objectEncoding
@@ -104,7 +110,7 @@ instance Replicated a => ReplicatedAsObject (ORSet a) where
 -- | XXX Internal. Common implementation of 'addValue' and 'addRef'.
 commonAdd :: (MonadE m, MonadObjectState a m, ReplicaClock m) => [Atom] -> m ()
 commonAdd payload =
-    modifyObjectStateChunk $ \StateChunk{stateBody} -> do
+    modifyObjectStateChunk_ $ \StateChunk{stateBody} -> do
         event <- getEventUuid
         let newOp = Op event Zero payload
         let chunk' = stateBody ++ [newOp]
@@ -129,7 +135,7 @@ commonRemove
     :: (MonadE m, ReplicaClock m, MonadObjectState (ORSet a) m)
     => ([Atom] -> Bool) -> m ()
 commonRemove isTarget =
-    modifyObjectStateChunk $ \chunk@StateChunk{stateBody} -> do
+    modifyObjectStateChunk_ $ \chunk@StateChunk{stateBody} -> do
         let state0@(ORSetRaw opMap) = stateFromChunk stateBody
         let targetEvents =
                 [ opId
@@ -161,3 +167,34 @@ removeRef
     :: (MonadE m, ReplicaClock m, MonadObjectState (ORSet a) m)
     => Object a -> m ()
 removeRef = commonRemove . eqRef
+
+-- | Reference to an item inside an 'ORSet'.
+data ORSetItem a = ORSetItem{key :: UUID, value :: Object a}
+    deriving (Show)
+
+zoom
+    :: MonadE m
+    => ORSetItem item -> ObjectStateT item m a -> ObjectStateT (ORSet item) m a
+zoom ORSetItem{value} innerModifier =
+    lift $ runReaderT innerModifier value
+
+findAnyAlive
+    :: (MonadE m, MonadObjectState (ORSet item) m) => m (Maybe (ORSetItem item))
+findAnyAlive = do
+    StateChunk{stateBody} <- getObjectStateChunk
+    let ORSetRaw opMap = stateFromChunk stateBody
+    let aliveItems = [op | op@Op{refId = UUID.Zero} <- toList opMap]
+    case listToMaybe aliveItems of
+        Nothing -> pure Nothing
+        Just Op{opId, payload} -> Just <$> case payload of
+            [AUuid itemValueRef] ->
+                pure ORSetItem{key = opId, value = Object itemValueRef}
+            _ -> throwErrorText "item payload is not an object ref"
+
+findAnyAlive'
+    :: (MonadE m, MonadObjectState (ORSet item) m) => m (ORSetItem item)
+findAnyAlive' = do
+    mx <- findAnyAlive
+    case mx of
+        Just x  -> pure x
+        Nothing -> throwErrorText "empty set"

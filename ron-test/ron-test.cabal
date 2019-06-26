@@ -69,6 +69,7 @@ test-suite test
     other-modules:
         HexDump
         LwwStruct
+        ORSet
         Types
     type: exitcode-stdio-1.0
 
