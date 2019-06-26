@@ -27,7 +27,8 @@ import           RON.Error (throwErrorString)
 import           RON.Schema as X
 import qualified RON.Schema.EDN as EDN
 import           RON.Schema.TH.Common (mkGuideType, mkNameT)
-import           RON.Schema.TH.Struct (mkReplicatedStructLww)
+import           RON.Schema.TH.Struct (mkReplicatedStructLww,
+                                       mkReplicatedStructSet)
 import qualified RON.UUID as UUID
 
 -- | QuasiQuoter to generate Haskell types from RON-Schema
@@ -48,6 +49,7 @@ mkReplicated' = fmap fold . traverse fromDecl where
         DEnum      e -> mkEnum e
         DOpaque    _ -> pure []
         DStructLww s -> mkReplicatedStructLww s
+        DStructSet s -> mkReplicatedStructSet s
 
 mkEnum :: TEnum -> TH.DecsQ
 mkEnum Enum{name, items} = do

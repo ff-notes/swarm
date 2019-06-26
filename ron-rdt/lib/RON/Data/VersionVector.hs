@@ -69,6 +69,9 @@ vvType = $(UUID.liftName "vv")
 instance Replicated VersionVector where
     encoding = objectEncoding
 
+instance ReplicatedBoundedSemilattice VersionVector where
+    rconcat = objectRconcat
+
 instance ReplicatedAsObject VersionVector where
     type Rep VersionVector = VersionVector
 

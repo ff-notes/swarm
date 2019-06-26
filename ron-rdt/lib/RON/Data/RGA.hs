@@ -318,6 +318,9 @@ newtype RGA a = RGA [a]
 
 instance Replicated a => Replicated (RGA a) where encoding = objectEncoding
 
+instance Replicated a => ReplicatedBoundedSemilattice (RGA a) where
+    rconcat = objectRconcat
+
 instance Replicated a => ReplicatedAsObject (RGA a) where
     type Rep (RGA a) = RgaRep
 
