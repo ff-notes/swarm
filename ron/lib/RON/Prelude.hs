@@ -7,7 +7,10 @@ module RON.Prelude (
     headMay,
     lastDef,
     maximumDef,
+    maximumMay,
     maxOn,
+    minimumDef,
+    minimumMay,
     minOn,
     note,
     replicateM2,
@@ -92,12 +95,13 @@ import           GHC.Real as X (Integral, fromIntegral, mod, realToFrac, round,
                                 (^), (^^))
 import           GHC.Stack as X (HasCallStack)
 import           System.IO as X (FilePath, IO)
+import           Text.Read as X (readMaybe)
 import           Text.Show as X (Show)
 
 --------------------------------------------------------------------------------
 
 import qualified Data.Foldable
-import           Data.List (last, maximum)
+import           Data.List (last, maximum, minimum)
 import           Data.String (IsString, fromString)
 import qualified Text.Show
 
@@ -123,8 +127,17 @@ list' onEmpty onNonEmpty = \case
 maximumDef :: Ord a => a -> [a] -> a
 maximumDef def = list' def maximum
 
+maximumMay :: Ord a => [a] -> Maybe a
+maximumMay = list' Nothing (Just . maximum)
+
 maxOn :: Ord b => (a -> b) -> a -> a -> a
 maxOn f x y = if f x < f y then y else x
+
+minimumDef :: Ord a => a -> [a] -> a
+minimumDef def = list' def minimum
+
+minimumMay :: Ord a => [a] -> Maybe a
+minimumMay = list' Nothing (Just . minimum)
 
 minOn :: Ord b => (a -> b) -> a -> a -> a
 minOn f x y = if f x < f y then x else y
