@@ -9,15 +9,18 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module RON.Data.Internal (
+    Encoding (..),
     ReducedChunk (..),
     Reducer (..),
     Reducible (..),
     Replicated (..),
     ReplicatedAsObject (..),
     ReplicatedAsPayload (..),
+    ReplicatedBoundedSemilattice (..),
     Unapplied,
     WireReducer,
     advanceToObject,
@@ -27,8 +30,11 @@ module RON.Data.Internal (
     modifyObjectStateChunk,
     modifyObjectStateChunk_,
     newObjectFrame,
+    reduceState,
+    reduceObjectStates,
     --
     objectEncoding,
+    objectRconcat,
     payloadEncoding,
     --
     fromRon,
@@ -40,11 +46,13 @@ module RON.Data.Internal (
 
 import           RON.Prelude
 
+import           Data.Foldable (foldl1)
+import           Data.List (minimum)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
-import           RON.Error (MonadE, errorContext, liftMaybe)
-import           RON.Event (ReplicaClock, advanceToUuid)
+import           RON.Error (MonadE, errorContext, liftMaybe, throwErrorText)
+import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
 import           RON.Semilattice (BoundedSemilattice)
 import           RON.Types (Atom (AInteger, AString, AUuid), Object (Object),
                             ObjectFrame (ObjectFrame, frame, uuid),
@@ -128,6 +136,8 @@ class Replicated a where
     -- 'payloadEncoding'
     encoding :: Encoding a
 
+type Payload = [Atom]
+
 data Encoding a = Encoding
     { encodingNewRon
         :: forall m
@@ -143,7 +153,6 @@ newRon = encodingNewRon encoding
 
 -- | Decode typed data from a payload.
 -- The implementation may use other objects in the frame to resolve references.
--- TODO(2019-06-28, cblp) use 'ReaderT' for symmetry with 'newRon'
 fromRon :: (MonadE m, Replicated a, MonadState StateFrame m) => Payload -> m a
 fromRon = encodingFromRon encoding
 
@@ -178,9 +187,10 @@ instance Replicated Int64 where encoding = payloadEncoding
 
 instance ReplicatedAsPayload Int64 where
     toPayload int = [AInteger int]
-    fromPayload atoms = errorContext "Integer" $ case atoms of
+    fromPayload atoms = errorContext "fromPayload @Integer" $ case atoms of
         [AInteger int] -> pure int
-        _              -> throwError "Expected Integer syntax"
+        [atom] -> throwErrorText $ "Expected Integer atom, got " <> show atom
+        _ -> throwErrorText $ "Expected 1 atom, got " <> show (length atoms)
 
 instance Replicated UUID where encoding = payloadEncoding
 
@@ -188,7 +198,7 @@ instance ReplicatedAsPayload UUID where
     toPayload u = [AUuid u]
     fromPayload atoms = errorContext "UUID" $ case atoms of
         [AUuid u] -> pure u
-        _         -> throwError "Expected UUID syntax"
+        _         -> throwError "Expected UUID atom"
 
 instance Replicated Text where encoding = payloadEncoding
 
@@ -196,7 +206,7 @@ instance ReplicatedAsPayload Text where
     toPayload t = [AString t]
     fromPayload atoms = errorContext "String" $ case atoms of
         [AString t] -> pure t
-        _           -> throwError "Expected string syntax"
+        _           -> throwError "Expected string atom"
 
 instance Replicated Char where encoding = payloadEncoding
 
@@ -210,10 +220,10 @@ instance ReplicatedAsPayload Char where
 -- An enclosing object's payload will be filled with this object's id.
 --
 -- Law: @'encoding' == 'objectEncoding'@
-class Replicated a => ReplicatedAsObject a where
+class (Reducible (Rep a), ReplicatedBoundedSemilattice a) =>
+    ReplicatedAsObject a where
 
-    -- | UUID of the type
-    objectOpType :: UUID
+    type Rep a
 
     -- | Encode data. Write frame and return id.
     newObject :: (ReplicaClock m, MonadState StateFrame m) => a -> m (Object a)
@@ -288,9 +298,17 @@ instance ReplicatedAsPayload a => ReplicatedAsPayload (Maybe a) where
         Just a  -> Some : toPayload a
         Nothing -> [None]
     fromPayload = errorContext "Option" . \case
-        Some : atoms -> Just <$> fromPayload atoms
-        [None]       -> pure Nothing
-        _            -> throwError "Bad Option"
+        Some : targetPayload -> Just <$> fromPayload targetPayload
+        _                    -> pure Nothing
+
+instance ReplicatedBoundedSemilattice a =>
+    ReplicatedBoundedSemilattice (Maybe a) where
+
+    rconcat payloads = case payloads' of
+        [] -> pure Nothing
+        _  -> Just <$> rconcat payloads'
+      where
+        payloads' = [targetPayload | Some : targetPayload <- payloads]
 
 pattern ATrue :: Atom
 pattern ATrue = AUuid (UUID 0xe36e69000000000 0)  -- true
@@ -329,3 +347,36 @@ advanceToObject = do
     atomAsUuid = \case
         AUuid u -> Just u
         _       -> Nothing
+
+class Replicated a => ReplicatedBoundedSemilattice a where
+    rconcat
+        :: (MonadE m, MonadState StateFrame m, ReplicaClock m)
+        => [Payload] -> m a
+
+reduceState :: forall a . Reducible a => StateChunk -> StateChunk -> StateChunk
+reduceState s1 s2 =
+    stateToChunk @a $ ((<>) `on` (stateFromChunk . stateBody)) s1 s2
+
+reduceObjectStates
+    :: forall a m
+    . (MonadE m, MonadState StateFrame m, ReplicaClock m, ReplicatedAsObject a)
+    => [Object a] -> m (Object a)
+reduceObjectStates = \case
+    [] ->
+        -- create an empty object, i.e. just a UUID without state
+        Object <$> getEventUuid
+    obj:objs -> do
+        chunks <- for (obj :| objs) $ runReaderT getObjectStateChunk
+        let chunk = foldl1 (reduceState @(Rep a)) chunks
+        let oid = minimum [i | Object i <- obj:objs]
+        modify' $ Map.insert oid chunk
+        pure $ Object oid
+
+objectRconcat
+    :: forall a m
+    . (MonadE m, MonadState StateFrame m, ReplicaClock m, ReplicatedAsObject a)
+    => [Payload] -> m a
+objectRconcat payloads = do
+    states <- for payloads $ fmap Object . fromPayload
+    Object ref <- reduceObjectStates @a states
+    fromRon [AUuid ref]

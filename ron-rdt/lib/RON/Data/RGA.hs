@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Replicated Growable Array (RGA)
 module RON.Data.RGA
@@ -41,9 +42,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
 import           RON.Data.Internal (MonadObjectState,
-                                    ReducedChunk (ReducedChunk), Reducible,
+                                    ReducedChunk (ReducedChunk), Reducible, Rep,
                                     Replicated, ReplicatedAsObject,
-                                    ReplicatedAsPayload, Unapplied,
+                                    ReplicatedAsPayload,
+                                    ReplicatedBoundedSemilattice, Unapplied,
                                     applyPatches, encoding, fromRon, getObject,
                                     getObjectStateChunk,
                                     modifyObjectStateChunk_, newObject, newRon,
@@ -113,6 +115,8 @@ vertexListFromOps = foldr go mempty where
 -- | Untyped RGA
 newtype RgaRep = RgaRep (Maybe VertexList)
     deriving (Eq, Monoid, Semigroup, Semilattice, Show)
+
+instance Semilattice RgaRep
 
 data PatchSet = PatchSet
     { psPatches  :: Map UUID VertexList
@@ -326,8 +330,11 @@ newtype RGA a = RGA [a]
 
 instance Replicated a => Replicated (RGA a) where encoding = objectEncoding
 
+instance Replicated a => ReplicatedBoundedSemilattice (RGA a) where
+    rconcat = objectRconcat
+
 instance Replicated a => ReplicatedAsObject (RGA a) where
-    objectOpType = rgaType
+    type Rep (RGA a) = RgaRep
 
     newObject (RGA items) = do
         vertexIds <- getEventUuids $ ls60 $ genericLength items

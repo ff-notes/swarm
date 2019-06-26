@@ -7,15 +7,17 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module RON.Schema.EDN (readSchema) where
 
 import           RON.Prelude
 
-import           Data.EDN (FromEDN, Tagged (NoTag, Tagged),
+import           Control.Arrow ((&&&))
+import           Data.EDN (FromEDN, Tagged (NoTag, Tagged), TaggedValue,
                            Value (List, Symbol), mapGetSymbol, parseEDN,
                            renderText, unexpected, withList, withMap, withNoTag)
-import           Data.EDN.Class.Parser (parseM)
+import           Data.EDN.Class.Parser (Parser, parseM)
 import           Data.EDN.Extra (decodeMultiDoc, isTagged, parseList,
                                  parseSymbol', withNoPrefix, withSymbol')
 import           Data.Map.Strict ((!?))
@@ -65,6 +67,7 @@ instance FromEDN (Declaration 'Parsed) where
             "enum"       -> DEnum      <$> parseList args
             "opaque"     -> DOpaque    <$> parseList args
             "struct_lww" -> DStructLww <$> parseList args
+            "struct_set" -> DStructSet <$> parseList args
             name         -> fail $ "unknown declaration " ++ Text.unpack name
         [] -> fail "empty declaration"
 
@@ -110,34 +113,43 @@ rememberDeclaration decl = do
 
 declarationName :: Declaration stage -> TypeName
 declarationName = \case
-    DAlias     Alias    {name} -> name
-    DEnum      Enum     {name} -> name
-    DOpaque    Opaque   {name} -> name
-    DStructLww StructLww{name} -> name
+    DAlias     Alias {name} -> name
+    DEnum      Enum  {name} -> name
+    DOpaque    Opaque{name} -> name
+    DStructLww Struct{name} -> name
+    DStructSet Struct{name} -> name
 
-instance FromEDN (StructLww 'Parsed) where
-    parseEDN = withNoTag . withList $ \case
-        nameSym : body -> do
-            let (annotationVals, fieldVals) = span isTagged body
-            name        <- parseSymbol' nameSym
-            fields      <- parseFields  fieldVals
-            annotations <- parseList    annotationVals
-            pure StructLww{name, fields, annotations}
-        [] -> fail
-            "Expected declaration in the form\
-            \ (struct_lww <name:symbol> <annotations>... <fields>...)"
+instance FromEDN (StructLww Parsed) where
+    parseEDN = parseStruct "struct_lww"
 
-      where
+instance FromEDN (StructSet Parsed) where
+    parseEDN = parseStruct "struct_set"
 
-        parseFields = \case
-            [] -> pure mempty
-            nameAsTagged : typeAsTagged : cont -> do
-                name <- parseSymbol' nameAsTagged
-                typ  <- parseEDN typeAsTagged
-                Map.insert name (Field typ) <$> parseFields cont
-            [f] ->
-                fail $
-                "field " ++ Text.unpack (renderText f) ++ " must have type"
+parseStruct :: String -> TaggedValue -> Parser (Struct encoding Parsed)
+parseStruct keyword = withNoTag . withList $ \case
+    nameSym : body -> do
+        let (annotationVals, fieldVals) = span isTagged body
+        name        <- parseSymbol' nameSym
+        fields      <- parseFields fieldVals
+        annotations <- parseList annotationVals
+        pure Struct{..}
+    [] ->
+        fail
+            $  "Expected declaration in the form ("
+            ++ keyword
+            ++ " <name:symbol> <annotations>... <fields>...)"
+
+  where
+
+    parseFields = \case
+        [] -> pure mempty
+        nameAsTagged : typeAsTagged : cont -> do
+            name <- parseSymbol' nameAsTagged
+            typ  <- parseEDN typeAsTagged
+            Map.insert name (FieldParsed typ) <$> parseFields cont
+        [f] ->
+            fail $
+            "field " ++ Text.unpack (renderText f) ++ " must have type"
 
 instance FromEDN StructAnnotations where
     parseEDN = withNoTag . withList $ \annTaggedValues -> do
@@ -187,22 +199,24 @@ collectDeclarations = traverse_ rememberDeclaration
 
 validateTypeUses :: (MonadFail m, MonadState Env m) => Schema 'Parsed -> m ()
 validateTypeUses = traverse_ $ \case
-    DAlias     Alias{target}     -> validateExpr target
-    DEnum      _                 -> pure ()
-    DOpaque    _                 -> pure ()
-    DStructLww StructLww{fields} ->
-        for_ fields $ \(Field typeExpr) -> validateExpr typeExpr
+    DAlias     Alias{target}  -> validateExpr target
+    DEnum      _              -> pure ()
+    DOpaque    _              -> pure ()
+    DStructLww Struct{fields} -> validateStruct fields
+    DStructSet Struct{fields} -> validateStruct fields
   where
     validateName name = do
         Env{userTypes} <- get
         unless
             (name `Map.member` userTypes || name `Map.member` prelude)
-            (fail $ "unknown type name " ++ Text.unpack name)
+            (fail $ "validateTypeUses: unknown type name " ++ Text.unpack name)
     validateExpr = \case
         Use name -> validateName name
         Apply name args -> do
             validateName name
             for_ args validateExpr
+    validateStruct =
+        traverse_ $ \(FieldParsed typeExpr) -> validateExpr typeExpr
 
 evalSchema :: Env -> Schema 'Resolved
 evalSchema env = fst <$> userTypes' where
@@ -214,13 +228,19 @@ evalSchema env = fst <$> userTypes' where
         DAlias Alias{name, target} -> let
             target' = evalType target
             in (DAlias Alias{name, target = target'}, Type0 target')
-        DEnum   t -> (DEnum t, Type0 $ TComposite $ TEnum t)
-        DOpaque t -> (DOpaque t, Type0 $ TOpaque t)
-        DStructLww StructLww{..} -> let
-            fields' =
-                (\(Field typeExpr) -> Field $ evalType typeExpr) <$> fields
-            struct = StructLww{fields = fields', ..}
-            in (DStructLww struct, Type0 $ TObject $ TStructLww struct)
+        DEnum      t -> (DEnum t, Type0 $ TComposite $ TEnum t)
+        DOpaque    t -> (DOpaque t, Type0 $ TOpaque t)
+        DStructLww s ->
+            (DStructLww &&& Type0 . TObject . TStructLww) $ evalStruct s
+        DStructSet s ->
+            (DStructSet &&& Type0 . TObject . TStructSet) $ evalStruct s
+
+    evalStruct :: Struct encoding Parsed -> Struct encoding Resolved
+    evalStruct Struct{..} = Struct
+        { fields =
+            (\(FieldParsed typeExpr) -> FieldResolved $ evalType typeExpr) <$> fields
+        , ..
+        }
 
     getType :: TypeName -> RonTypeF
     getType typ

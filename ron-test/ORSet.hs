@@ -14,7 +14,7 @@ import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 import           RON.Data (evalObjectState, execObjectState, getObject,
                            newObjectFrame)
 import           RON.Data.ORSet (ORSet (ORSet), addValue, findAnyAlive',
-                                 removeValue, zoom)
+                                 removeValue, zoomItem)
 import           RON.Event (ReplicaId, applicationSpecific)
 import           RON.Event.Simulation (runNetworkSimT, runReplicaSimT)
 import           RON.Schema.TH (mkReplicated)
@@ -84,9 +84,9 @@ prop_orSet =
                 -- top-level
                 addValue $ ORSet []
                 set1 <- findAnyAlive'
-                zoom set1 $ do
+                zoomItem set1 $ do
                     set2 <- findAnyAlive'
-                    zoom set2 $ do
+                    zoomItem set2 $ do
                         addValue "candies"
                         removeValue "octaves"
 

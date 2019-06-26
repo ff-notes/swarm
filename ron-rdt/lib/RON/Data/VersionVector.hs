@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Version Vector
 module RON.Data.VersionVector
@@ -68,8 +69,11 @@ vvType = $(UUID.liftName "vv")
 instance Replicated VersionVector where
     encoding = objectEncoding
 
+instance ReplicatedBoundedSemilattice VersionVector where
+    rconcat = objectRconcat
+
 instance ReplicatedAsObject VersionVector where
-    objectOpType = vvType
+    type Rep VersionVector = VersionVector
 
     newObject (VersionVector vv) = do
         oid <- getEventUuid
