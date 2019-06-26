@@ -13,12 +13,14 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module RON.Data.Internal (
+    Encoding (..),
     ReducedChunk (..),
     Reducer (..),
     Reducible (..),
     Replicated (..),
     ReplicatedAsObject (..),
     ReplicatedAsPayload (..),
+    ReplicatedBoundedSemilattice (..),
     Unapplied,
     WireReducer,
     advanceToObject,
@@ -32,6 +34,7 @@ module RON.Data.Internal (
     reduceObjectStates,
     --
     objectEncoding,
+    objectRconcat,
     payloadEncoding,
     --
     fromRon,
@@ -148,7 +151,6 @@ newRon = encodingNewRon encoding
 
 -- | Decode typed data from a payload.
 -- The implementation may use other objects in the frame to resolve references.
--- TODO(2019-06-28, cblp) use 'ReaderT' for symmetry with 'newRon'
 fromRon :: (MonadE m, Replicated a, MonadState StateFrame m) => Payload -> m a
 fromRon = encodingFromRon encoding
 
@@ -215,7 +217,8 @@ instance ReplicatedAsPayload Char where
 -- An enclosing object's payload will be filled with this object's id.
 --
 -- Law: @'encoding' == 'objectEncoding'@
-class (Reducible (Rep a), Replicated a) => ReplicatedAsObject a where
+class (Reducible (Rep a), ReplicatedBoundedSemilattice a) =>
+    ReplicatedAsObject a where
 
     type Rep a
 
@@ -291,6 +294,15 @@ instance ReplicatedAsPayload a => ReplicatedAsPayload (Maybe a) where
         Some : atoms -> Just <$> fromPayload atoms
         _            -> pure Nothing
 
+instance ReplicatedBoundedSemilattice a =>
+    ReplicatedBoundedSemilattice (Maybe a) where
+
+    rconcat payloads = case payloads' of
+        []   -> pure Nothing
+        p:ps -> Just <$> rconcat (p :| ps)
+      where
+        payloads' = [targetPayload | Some : targetPayload <- toList payloads]
+
 pattern ATrue :: Atom
 pattern ATrue = AUuid (UUID 0xe36e69000000000 0)  -- true
 
@@ -329,6 +341,9 @@ advanceToObject = do
         AUuid u -> Just u
         _       -> Nothing
 
+class Replicated a => ReplicatedBoundedSemilattice a where
+    rconcat :: (MonadE m, MonadState StateFrame m) => NonEmpty Payload -> m a
+
 reduceState :: forall a . Reducible a => StateChunk -> StateChunk -> StateChunk
 reduceState s1 s2 =
     stateToChunk @a $ ((<>) `on` (stateFromChunk . stateBody)) s1 s2
@@ -343,3 +358,12 @@ reduceObjectStates (obj :| objs) = do
     let oid = minimum [i | Object i <- obj:objs]
     modify' $ Map.insert oid chunk
     pure $ Object oid
+
+objectRconcat
+    :: forall a m
+    . (MonadE m, MonadState StateFrame m, ReplicatedAsObject a)
+    => NonEmpty Payload -> m a
+objectRconcat payloads = do
+    states <- for payloads $ fmap Object . fromPayload
+    Object ref <- reduceObjectStates @a states
+    fromRon [AUuid ref]
