@@ -8,6 +8,7 @@ module RON.Schema.TH.Common (
     liftText,
     mkGuideType,
     mkNameT,
+    newNameT,
     valD,
     valDP,
 ) where
@@ -15,7 +16,7 @@ module RON.Schema.TH.Common (
 import           RON.Prelude
 
 import qualified Data.Text as Text
-import           Language.Haskell.TH (conT, normalB, varP)
+import           Language.Haskell.TH (Q, conT, normalB, varP)
 import qualified Language.Haskell.TH as TH
 import           Language.Haskell.TH.Syntax (liftString)
 
@@ -27,6 +28,9 @@ import           RON.Types (UUID)
 
 mkNameT :: Text -> TH.Name
 mkNameT = TH.mkName . Text.unpack
+
+newNameT :: Text -> Q TH.Name
+newNameT = TH.newName . Text.unpack
 
 valD :: TH.PatQ -> TH.ExpQ -> TH.DecQ
 valD pat body = TH.valD pat (normalB body) []
@@ -45,14 +49,15 @@ mkGuideType typ = case typ of
         TAString  -> [t| Text   |]
         TAUuid    -> [t| UUID   |]
     TComposite t -> case t of
-        TEnum   Enum{name} -> conT $ mkNameT name
-        TOption u          -> [t| Maybe $(mkGuideType u) |]
+        TEnum     Enum{name} -> conT $ mkNameT name
+        TOption   u          -> [t| Maybe $(mkGuideType u) |]
     TObject t -> case t of
-        TORSet     item            -> wrap  ''ORSet    item
-        TORSetMap  key value       -> wrap2 ''ORSetMap key value
-        TRga       item            -> wrap  ''RGA      item
-        TStructLww StructLww{name} -> conT $ mkNameT name
-        TVersionVector             -> [t| VersionVector |]
+        TORSet     item         -> wrap  ''ORSet    item
+        TORSetMap  key value    -> wrap2 ''ORSetMap key value
+        TRga       item         -> wrap  ''RGA      item
+        TStructLww Struct{name} -> conT $ mkNameT name
+        TStructSet Struct{name} -> conT $ mkNameT name
+        TVersionVector          -> [t| VersionVector |]
     TOpaque Opaque{name, annotations} -> let
         OpaqueAnnotations{haskellType} = annotations
         in conT $ mkNameT $ fromMaybe name haskellType

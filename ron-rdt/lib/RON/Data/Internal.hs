@@ -360,6 +360,7 @@ reduceObjectStates (obj :| objs) = do
     modify' $ Map.insert oid chunk
     pure $ Object oid
 
+-- | Implementation of 'rconcat' for 'ReplicatedAsObject'
 objectRconcat
     :: forall a m
     . (MonadE m, MonadState StateFrame m, ReplicatedAsObject a)

@@ -17,6 +17,7 @@ import           Data.Bits (countLeadingZeros, shiftL, xor)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
+import           Data.Foldable (minimumBy)
 
 import qualified RON.Base64 as Base64
 import           RON.Util (ByteStringL)
@@ -125,5 +126,6 @@ serializeVersion = \case
 serializeUuidGeneric :: UUID -> ByteString
 serializeUuidGeneric (UUID x y) = Base64.encode64 x <> Base64.encode64 y
 
+-- | XXX Partial for lists!
 minimumByLength :: Foldable f => f ByteString -> ByteString
 minimumByLength = minimumBy $ comparing BS.length

@@ -8,9 +8,11 @@ module RON.Prelude (
     lastDef,
     maximumDef,
     maximumMay,
+    maximumMayOn,
     maxOn,
     minimumDef,
     minimumMay,
+    minimumMayOn,
     minOn,
     note,
     replicateM2,
@@ -51,8 +53,8 @@ import           Data.Data as X (Data)
 import           Data.Either as X (Either (Left, Right), either)
 import           Data.Eq as X (Eq, (/=), (==))
 import           Data.Foldable as X (Foldable, and, asum, fold, foldMap, foldl',
-                                     foldr, for_, length, minimumBy, null, or,
-                                     toList, traverse_)
+                                     foldr, for_, length, null, or, toList,
+                                     traverse_)
 import           Data.Function as X (const, flip, id, on, ($), (.))
 import           Data.Functor as X (Functor, fmap, ($>), (<$), (<$>), (<&>))
 import           Data.Functor.Identity as X (Identity)
@@ -101,7 +103,7 @@ import           Text.Show as X (Show)
 --------------------------------------------------------------------------------
 
 import qualified Data.Foldable
-import           Data.List (last, maximum, minimum)
+import           Data.List (last, maximum, maximumBy, minimum, minimumBy)
 import           Data.String (IsString, fromString)
 import qualified Text.Show
 
@@ -130,6 +132,9 @@ maximumDef def = list' def maximum
 maximumMay :: Ord a => [a] -> Maybe a
 maximumMay = list' Nothing (Just . maximum)
 
+maximumMayOn :: Ord b => (a -> b) -> [a] -> Maybe a
+maximumMayOn key = list' Nothing (Just . maximumBy (comparing key))
+
 maxOn :: Ord b => (a -> b) -> a -> a -> a
 maxOn f x y = if f x < f y then y else x
 
@@ -138,6 +143,9 @@ minimumDef def = list' def minimum
 
 minimumMay :: Ord a => [a] -> Maybe a
 minimumMay = list' Nothing (Just . minimum)
+
+minimumMayOn :: Ord b => (a -> b) -> [a] -> Maybe a
+minimumMayOn key = list' Nothing (Just . minimumBy (comparing key))
 
 minOn :: Ord b => (a -> b) -> a -> a -> a
 minOn f x y = if f x < f y then x else y
