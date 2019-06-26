@@ -12,6 +12,7 @@ library
     import: language
     build-depends:
         -- global
+        data-default,
         hedgehog,
         mtl,
         text,
@@ -23,6 +24,7 @@ library
         Gen
         LwwStruct.Types
         Orphans
+        StructSet.Types
     hs-source-dirs: lib
 
 test-suite common
@@ -52,6 +54,7 @@ test-suite test
     build-depends:
         -- global
         bytestring,
+        data-default,
         directory,
         hedgehog,
         interpolate,
@@ -71,6 +74,7 @@ test-suite test
         HexDump
         LwwStruct
         ORSet
+        StructSet
         Types
     type: exitcode-stdio-1.0
 
