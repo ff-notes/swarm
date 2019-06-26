@@ -9,7 +9,7 @@
 
 -- | LWW-per-field RDT
 module RON.Data.LWW
-    ( LwwPerField (..)
+    ( LwwRep (..)
     , assignField
     , lwwType
     , newObject
@@ -24,10 +24,12 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
                                     Replicated, fromRon, getObjectStateChunk,
-                                    mkStateChunk, newRon, reducibleOpType,
-                                    stateFromChunk, stateToChunk)
+                                    mkStateChunk, modifyObjectStateChunk_,
+                                    newRon, reducibleOpType, stateFromChunk,
+                                    stateToChunk)
 import           RON.Error (MonadE, errorContext)
-import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
+import           RON.Event (ReplicaClock, getEventUuid)
+import           RON.Semilattice (BoundedSemilattice, Semilattice)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util (Instance (Instance))
@@ -38,26 +40,30 @@ lww :: Op -> Op -> Op
 lww = maxOn opId
 
 -- | Untyped LWW. Implementation: a map from 'opRef' to the original op.
-newtype LwwPerField = LwwPerField (Map UUID Op)
+newtype LwwRep = LwwRep (Map UUID Op)
     deriving (Eq, Monoid, Show)
 
-instance Semigroup LwwPerField where
-    LwwPerField fields1 <> LwwPerField fields2 =
-        LwwPerField $ Map.unionWith lww fields1 fields2
+instance Semigroup LwwRep where
+    LwwRep fields1 <> LwwRep fields2 =
+        LwwRep $ Map.unionWith lww fields1 fields2
 
-instance Reducible LwwPerField where
+instance Semilattice LwwRep where
+
+instance BoundedSemilattice LwwRep where
+
+instance Reducible LwwRep where
     reducibleOpType = lwwType
 
     stateFromChunk ops =
-        LwwPerField $ Map.fromListWith lww [(refId, op) | op@Op{refId} <- ops]
+        LwwRep $ Map.fromListWith lww [(refId, op) | op@Op{refId} <- ops]
 
-    stateToChunk (LwwPerField fields) = mkStateChunk lwwType $ Map.elems fields
+    stateToChunk (LwwRep fields) = mkStateChunk lwwType $ Map.elems fields
 
 -- | Name-UUID to use as LWW type marker.
 lwwType :: UUID
 lwwType = $(UUID.liftName "lww")
 
--- | Create LWW object from a list of named fields.
+-- | Create an LWW object from a list of named fields.
 newObject
     :: (MonadState StateFrame m, ReplicaClock m)
     => [(UUID, Instance Replicated)] -> m UUID
@@ -89,7 +95,7 @@ viewField field StateChunk{..} =
             _    -> throwError "unreduced state"
         fromRon payload
 
--- | Decode field value
+-- | Read field value
 readField
     :: (MonadE m, MonadObjectState struct m, Replicated field)
     => UUID  -- ^ Field name
@@ -104,18 +110,15 @@ assignField
     => UUID   -- ^ Field name
     -> field  -- ^ Value
     -> m ()
-assignField field value = do
-    StateChunk{stateBody, stateVersion} <- getObjectStateChunk
-    advanceToUuid stateVersion
-    let chunk = filter (\Op{refId} -> refId /= field) stateBody
-    event <- getEventUuid
-    p <- newRon value
-    let newOp = Op event field p
-    let chunk' = sortOn refId $ newOp : chunk
-    let state' = StateChunk
+assignField field value =
+    modifyObjectStateChunk_ $ \StateChunk{stateBody} -> do
+        let chunk = filter (\Op{refId} -> refId /= field) stateBody
+        event <- getEventUuid
+        p <- newRon value
+        let newOp = Op event field p
+        let chunk' = sortOn refId $ newOp : chunk
+        pure StateChunk
             {stateVersion = event, stateBody = chunk', stateType = lwwType}
-    Object uuid <- ask
-    modify' $ Map.insert uuid state'
 
 -- | Pseudo-lens to an object inside a specified field
 zoomField

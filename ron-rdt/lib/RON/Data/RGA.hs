@@ -8,11 +8,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Replicated Growable Array (RGA)
 module RON.Data.RGA
     ( RGA (..)
-    , RgaRaw
+    , RgaRep
     , RgaString
     , edit
     , editText
@@ -41,18 +42,20 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
 import           RON.Data.Internal (MonadObjectState,
-                                    ReducedChunk (ReducedChunk), Reducible,
+                                    ReducedChunk (ReducedChunk), Reducible, Rep,
                                     Replicated, ReplicatedAsObject,
-                                    ReplicatedAsPayload, Unapplied,
+                                    ReplicatedAsPayload,
+                                    ReplicatedBoundedSemilattice, Unapplied,
                                     applyPatches, encoding, fromRon, getObject,
                                     getObjectStateChunk,
                                     modifyObjectStateChunk_, newObject, newRon,
-                                    objectEncoding, objectOpType, rcBody, rcRef,
-                                    rcVersion, reduceUnappliedPatches,
-                                    reducibleOpType, stateFromChunk,
-                                    stateToChunk, toPayload)
+                                    objectEncoding, objectRconcat, rcBody,
+                                    rcRef, rcVersion, rconcat,
+                                    reduceUnappliedPatches, reducibleOpType,
+                                    stateFromChunk, stateToChunk, toPayload)
 import           RON.Error (MonadE, errorContext, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid, getEventUuids)
+import           RON.Semilattice (BoundedSemilattice, Semilattice)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util.Word (pattern B11, ls60)
@@ -111,8 +114,12 @@ vertexListFromOps = foldr go mempty where
                 HashMap.insert opId (item $ Just listHead) listItems
 
 -- | Untyped RGA
-newtype RgaRaw = RgaRaw (Maybe VertexList)
+newtype RgaRep = RgaRep (Maybe VertexList)
     deriving (Eq, Monoid, Semigroup, Show)
+
+instance Semilattice RgaRep
+
+instance BoundedSemilattice RgaRep
 
 data PatchSet = PatchSet
     { psPatches  :: Map UUID VertexList
@@ -164,12 +171,12 @@ patchSetFromChunk ReducedChunk{rcRef, rcBody} =
                 Just patch -> mempty{psPatches = Map.singleton rcRef patch}
                 Nothing -> mempty
 
-instance Reducible RgaRaw where
+instance Reducible RgaRep where
     reducibleOpType = rgaType
 
-    stateFromChunk = RgaRaw . vertexListFromOps
+    stateFromChunk = RgaRep . vertexListFromOps
 
-    stateToChunk (RgaRaw rga) = StateChunk
+    stateToChunk (RgaRep rga) = StateChunk
         {stateType = rgaType, stateVersion = chunkVersion stateBody, stateBody}
       where
         stateBody = maybe [] vertexListToOps rga
@@ -203,7 +210,7 @@ reapplyPatchSet :: PatchSet -> PatchSet
 reapplyPatchSet ps =
     continue ps [reapplyPatchesToOtherPatches, reapplyRemovalsToPatches]
 
-reapplyPatchSetToState :: RgaRaw -> PatchSet -> (RgaRaw, PatchSet)
+reapplyPatchSetToState :: RgaRep -> PatchSet -> (RgaRep, PatchSet)
 reapplyPatchSetToState rga ps =
     continue (rga, ps) [reapplyPatchesToState, reapplyRemovalsToState]
 
@@ -212,13 +219,13 @@ continue x fs = case asum $ map ($ x) fs of
     Nothing -> x
     Just x' -> continue x' fs
 
-reapplyPatchesToState :: (RgaRaw, PatchSet) -> Maybe (RgaRaw, PatchSet)
-reapplyPatchesToState (RgaRaw rstate, ps@PatchSet{..}) = case rstate of
+reapplyPatchesToState :: (RgaRep, PatchSet) -> Maybe (RgaRep, PatchSet)
+reapplyPatchesToState (RgaRep rstate, ps@PatchSet{..}) = case rstate of
     Just VertexList{listHead = targetHead, listItems = targetItems} -> asum
         [ do
             targetItems' <- applyPatch parent patch targetItems
             pure
-                ( RgaRaw . Just $ VertexList targetHead targetItems'
+                ( RgaRep . Just $ VertexList targetHead targetItems'
                 , ps{psPatches = Map.delete parent psPatches}
                 )
         | (parent, patch) <- Map.assocs psPatches
@@ -227,7 +234,7 @@ reapplyPatchesToState (RgaRaw rstate, ps@PatchSet{..}) = case rstate of
         -- rstate is empty => only virtual 0 node exists
         -- => we can apply only 0 patch
         patch <- psPatches !? Zero
-        pure (RgaRaw $ Just patch, ps{psPatches = Map.delete Zero psPatches})
+        pure (RgaRep $ Just patch, ps{psPatches = Map.delete Zero psPatches})
 
 reapplyPatchesToOtherPatches :: PatchSet -> Maybe PatchSet
 reapplyPatchesToOtherPatches ps@PatchSet{..} = asum
@@ -260,14 +267,14 @@ applyPatch parent patch targetItems = case parent of
         let item' = item{itemNext = Just next'}
         pure $ HashMap.insert parent item' targetItems <> newItems
 
-reapplyRemovalsToState :: (RgaRaw, PatchSet) -> Maybe (RgaRaw, PatchSet)
-reapplyRemovalsToState (RgaRaw rstate, ps@PatchSet{..}) = do
+reapplyRemovalsToState :: (RgaRep, PatchSet) -> Maybe (RgaRep, PatchSet)
+reapplyRemovalsToState (RgaRep rstate, ps@PatchSet{..}) = do
     VertexList{listHead = targetHead, listItems = targetItems} <- rstate
     asum
         [ do
             targetItems' <- applyRemoval parent tombstone targetItems
             pure
-                ( RgaRaw . Just $ VertexList targetHead targetItems'
+                ( RgaRep . Just $ VertexList targetHead targetItems'
                 , ps{psRemovals = Map.delete parent psRemovals}
                 )
         | (parent, tombstone) <- Map.assocs psRemovals
@@ -334,8 +341,11 @@ newtype RGA a = RGA [a]
 
 instance Replicated a => Replicated (RGA a) where encoding = objectEncoding
 
+instance Replicated a => ReplicatedBoundedSemilattice (RGA a) where
+    rconcat = objectRconcat
+
 instance Replicated a => ReplicatedAsObject (RGA a) where
-    objectOpType = rgaType
+    type Rep (RGA a) = RgaRep
 
     newObject (RGA items) = do
         vertexIds <- getEventUuids $ ls60 $ genericLength items

@@ -55,6 +55,7 @@ import           HexDump (hexdump)
 import qualified LwwStruct
 import           Orphans ()
 import qualified ORSet
+import qualified StructSet
 import           Types (TestRecursiveORSet (TestRecursiveORSet), testRecSet,
                         testRecSet_zoom)
 
@@ -261,6 +262,8 @@ prop_ron_json_example = let
 lwwType = $(UUID.liftName "lww")
 
 prop_lwwStruct = LwwStruct.prop_lwwStruct
+
+prop_structSet = StructSet.prop_structSet
 
 prop_orSet = ORSet.prop_orSet
 

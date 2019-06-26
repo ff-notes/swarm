@@ -62,7 +62,7 @@ import           Data.List as X (drop, filter, genericLength, intercalate,
                                  isPrefixOf, isSuffixOf, lookup, map, partition,
                                  repeat, replicate, sortBy, sortOn, span,
                                  splitAt, take, takeWhile, unlines, unwords,
-                                 zip, (++))
+                                 zip, zipWith, (++))
 import           Data.List.NonEmpty as X (NonEmpty ((:|)), nonEmpty)
 import           Data.Map.Strict as X (Map)
 import           Data.Maybe as X (Maybe (Just, Nothing), catMaybes, fromMaybe,
