@@ -24,10 +24,12 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
                                     Replicated, fromRon, getObjectStateChunk,
-                                    mkStateChunk, newRon, reducibleOpType,
-                                    stateFromChunk, stateToChunk)
+                                    mkStateChunk, modifyObjectStateChunk_,
+                                    newRon, reducibleOpType, stateFromChunk,
+                                    stateToChunk)
 import           RON.Error (MonadE, errorContext)
-import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
+import           RON.Event (ReplicaClock, getEventUuid)
+import           RON.Semilattice (BoundedSemilattice, Semilattice)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util (Instance (Instance))
@@ -45,6 +47,10 @@ instance Semigroup LwwRep where
     LwwRep fields1 <> LwwRep fields2 =
         LwwRep $ Map.unionWith lww fields1 fields2
 
+instance Semilattice LwwRep where
+
+instance BoundedSemilattice LwwRep where
+
 instance Reducible LwwRep where
     reducibleOpType = lwwType
 
@@ -57,7 +63,7 @@ instance Reducible LwwRep where
 lwwType :: UUID
 lwwType = $(UUID.liftName "lww")
 
--- | Create LWW object from a list of named fields.
+-- | Create an LWW object from a list of named fields.
 newObject
     :: (MonadState StateFrame m, ReplicaClock m)
     => [(UUID, Instance Replicated)] -> m UUID
@@ -89,7 +95,7 @@ viewField field StateChunk{..} =
             _    -> throwError "unreduced state"
         fromRon payload
 
--- | Decode field value
+-- | Read field value
 readField
     :: (MonadE m, MonadObjectState struct m, Replicated field)
     => UUID  -- ^ Field name
@@ -104,18 +110,15 @@ assignField
     => UUID   -- ^ Field name
     -> field  -- ^ Value
     -> m ()
-assignField field value = do
-    StateChunk{stateBody, stateVersion} <- getObjectStateChunk
-    advanceToUuid stateVersion
-    let chunk = filter (\Op{refId} -> refId /= field) stateBody
-    event <- getEventUuid
-    p <- newRon value
-    let newOp = Op event field p
-    let chunk' = sortOn refId $ newOp : chunk
-    let state' = StateChunk
+assignField field value =
+    modifyObjectStateChunk_ $ \StateChunk{stateBody} -> do
+        let chunk = filter (\Op{refId} -> refId /= field) stateBody
+        event <- getEventUuid
+        p <- newRon value
+        let newOp = Op event field p
+        let chunk' = sortOn refId $ newOp : chunk
+        pure StateChunk
             {stateVersion = event, stateBody = chunk', stateType = lwwType}
-    Object uuid <- ask
-    modify' $ Map.insert uuid state'
 
 -- | Pseudo-lens to an object inside a specified field
 zoomField

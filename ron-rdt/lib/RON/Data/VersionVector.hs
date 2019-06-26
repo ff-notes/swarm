@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Version Vector
 module RON.Data.VersionVector
@@ -15,6 +16,7 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal
 import           RON.Event (getEventUuid)
+import           RON.Semilattice (BoundedSemilattice, Semilattice)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),
                             UUID (UUID))
 import qualified RON.UUID as UUID
@@ -43,6 +45,10 @@ instance Semigroup VersionVector where
 instance Monoid VersionVector where
     mempty = VersionVector mempty
 
+instance Semilattice VersionVector
+
+instance BoundedSemilattice VersionVector
+
 instance Reducible VersionVector where
     reducibleOpType = vvType
 
@@ -58,8 +64,11 @@ vvType = $(UUID.liftName "vv")
 instance Replicated VersionVector where
     encoding = objectEncoding
 
+instance ReplicatedBoundedSemilattice VersionVector where
+    rconcat = objectRconcat
+
 instance ReplicatedAsObject VersionVector where
-    objectOpType = vvType
+    type Rep VersionVector = VersionVector
 
     newObject (VersionVector vv) = do
         oid <- getEventUuid

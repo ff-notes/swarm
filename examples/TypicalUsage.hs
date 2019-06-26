@@ -1,12 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
-import RON.Data
-import RON.Data.RGA
-import RON.Schema.TH
-import RON.Storage.FS as Storage
+import           RON.Data
+import           RON.Data.RGA
+import           RON.Schema.TH
+import           RON.Storage.FS as Storage
 
 [mkReplicated|
     (struct_lww Note

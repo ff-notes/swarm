@@ -1,5 +1,5 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -16,8 +16,11 @@ module RON.Schema (
     RonType (..),
     Schema,
     Stage (..),
+    Struct (..),
     StructAnnotations (..),
-    StructLww (..),
+    StructEncoding (..),
+    StructLww,
+    StructSet,
     TAtom (..),
     TComposite (..),
     TEnum (..),
@@ -36,7 +39,7 @@ import           RON.Prelude
 
 import qualified Data.Text as Text
 
-data Stage = Parsed | Resolved
+data Stage = Parsed | Resolved | Equipped
 
 type TypeName = Text
 
@@ -54,8 +57,8 @@ data RonType
     deriving (Show)
 
 data TComposite
-    = TOption RonType
-    | TEnum   TEnum
+    = TEnum   TEnum
+    | TOption RonType
     deriving (Show)
 
 data TEnum = Enum {name :: Text, items :: [Text]}
@@ -65,16 +68,23 @@ data TObject
     = TORSet     RonType
     | TORSetMap  RonType RonType
     | TRga       RonType
-    | TStructLww (StructLww 'Resolved)
+    | TStructLww (StructLww Resolved)
+    | TStructSet (StructSet Resolved)
     | TVersionVector
     deriving (Show)
 
-data StructLww stage = StructLww
+data StructEncoding = SELww | SESet
+
+data Struct (encoding :: StructEncoding) stage = Struct
     { name        :: Text
     , fields      :: Map Text (Field stage)
     , annotations :: StructAnnotations
     }
-deriving instance Show (UseType stage) => Show (StructLww stage)
+deriving instance Show (Field stage) => Show (Struct encoding stage)
+
+type StructLww = Struct SELww
+
+type StructSet = Struct SESet
 
 data StructAnnotations = StructAnnotations
     { haskellFieldPrefix        :: Text
@@ -89,8 +99,13 @@ defaultStructAnnotations = StructAnnotations
 data CaseTransform = TitleCase
     deriving (Show)
 
-newtype Field stage = Field{ronType :: UseType stage}
-deriving instance Show (UseType stage) => Show (Field stage)
+data family Field (stage :: Stage)
+
+newtype instance Field Parsed = FieldParsed{ronType :: UseType Parsed}
+    deriving (Show)
+
+newtype instance Field Resolved = FieldResolved{ronType :: UseType Resolved}
+    deriving (Show)
 
 type family UseType (stage :: Stage) where
     UseType 'Parsed   = TypeExpr
@@ -101,7 +116,9 @@ data Declaration stage
     | DEnum       TEnum
     | DOpaque     Opaque
     | DStructLww (StructLww stage)
-deriving instance Show (UseType stage) => Show (Declaration stage)
+    | DStructSet (StructSet stage)
+deriving instance
+    (Show (Field stage), Show (UseType stage)) => Show (Declaration stage)
 
 type family Schema (stage :: Stage) where
     Schema 'Parsed   = [Declaration 'Parsed]

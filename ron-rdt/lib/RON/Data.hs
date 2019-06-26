@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,6 +13,7 @@
 module RON.Data (
     Reducible (..),
     Replicated (..),
+    ReplicatedBoundedSemilattice (..),
     ReplicatedAsObject (..),
     ReplicatedAsPayload (..),
     fromRon,
@@ -19,6 +21,7 @@ module RON.Data (
     mkStateChunk,
     newRon,
     objectEncoding,
+    objectRconcat,
     payloadEncoding,
     reduceObject,
     reduceStateFrame,
@@ -47,7 +50,7 @@ import           RON.Data.LWW (LwwRep)
 import           RON.Data.ORSet (ORSetRep)
 import           RON.Data.RGA (RgaRep)
 import           RON.Data.VersionVector (VersionVector)
-import           RON.Error (MonadE, throwErrorString)
+import           RON.Error (MonadE, throwErrorText)
 import           RON.Types (ClosedOp (..), Object (Object),
                             ObjectState (ObjectState, frame, uuid), Op (..),
                             StateChunk (..), StateFrame, UUID,
@@ -168,10 +171,6 @@ mkWireReducer obj chunks = chunks' <> leftovers where
         , wrcBody   = rcBody
         }
 
-reduceState :: forall a . Reducible a => StateChunk -> StateChunk -> StateChunk
-reduceState s1 s2 =
-    stateToChunk @a $ ((<>) `on` (stateFromChunk . stateBody)) s1 s2
-
 reduceStateFrame :: MonadE m => StateFrame -> StateFrame -> m StateFrame
 reduceStateFrame s1 s2 =
     (`execStateT` s1) . (`Map.traverseWithKey` s2) $ \oid chunk -> let
@@ -181,8 +180,8 @@ reduceStateFrame s1 s2 =
             Just Reducer{stateReducer} ->
                 modify' $ Map.insertWith stateReducer oid chunk
             Nothing ->
-                throwErrorString $
-                "Cannot reduce StateFrame of unknown type " ++ show stateType
+                throwErrorText $
+                "Cannot reduce StateFrame of unknown type " <> show stateType
 
 unsafeReduceObject
     :: MonadE m => ObjectState a -> StateFrame -> m (ObjectState a)
@@ -194,7 +193,7 @@ unsafeReduceObject obj@ObjectState{frame = s1} s2 = do
 reduceObject :: MonadE m => ObjectState a -> ObjectState a -> m (ObjectState a)
 reduceObject o1@ObjectState{uuid = id1} ObjectState{uuid = id2, frame = frame2}
     | id1 == id2 = unsafeReduceObject o1 frame2
-    | otherwise  = throwErrorString $ "Object ids differ: " ++ show (id1, id2)
+    | otherwise  = throwErrorText $ "Object ids differ: " <> show (id1, id2)
 
 newtype MaxOnFst a b = MaxOnFst (a, b)
 

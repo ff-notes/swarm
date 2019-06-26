@@ -23,6 +23,7 @@ library
         Gen
         LwwStruct.Types
         Orphans
+        StructSet.Types
     hs-source-dirs: lib
 
 test-suite common
@@ -71,6 +72,7 @@ test-suite test
         HexDump
         LwwStruct
         ORSet
+        StructSet
         Types
     type: exitcode-stdio-1.0
 
