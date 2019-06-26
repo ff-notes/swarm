@@ -17,7 +17,6 @@ module Attoparsec.Extra
 
 import           RON.Prelude
 
-import           Data.Attoparsec.ByteString.Char8 (anyChar)
 import           Data.Attoparsec.ByteString.Char8 (anyChar, decimal, isDigit, isDigit_w8, signed)
 import qualified Data.Attoparsec.Internal.Types as Internal
 import           Data.Attoparsec.Lazy as Attoparsec
@@ -103,7 +102,7 @@ unambiguousDouble = do
     sign <- peekWord8'
     let !positive = sign == plus || sign /= minus
     when (sign == plus || sign == minus) $
-        void $ anyWord8
+        void anyWord8
 
     n <- decimal
 
@@ -128,7 +127,7 @@ unambiguousDouble = do
     (satisfy (\ex -> ex == littleE || ex == bigE) *>
         fmap (Sci.toRealFloat . Sci.scientific signedCoeff . (e +)) (signed decimal)) <|>
         (if hasDot then pure (Sci.toRealFloat $ Sci.scientific signedCoeff    e)
-                   else fail $ "Double is not unambiguous")
+                   else fail "Double is not unambiguous")
 
 (<+>) :: Parser a -> Parser a -> Parser a
 (<+>) p1 p2 = Internal.Parser $ \t pos more lose suc -> let

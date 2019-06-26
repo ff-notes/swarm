@@ -135,7 +135,7 @@ serializeAtomZip = \case
 serializeFloatAtom :: Double -> ByteStringL
 serializeFloatAtom f = let
     s = show f
-    p = or [List.elem '.' s, List.elem 'e' s, List.elem 'E' s]
+    p = ('.' `List.elem` s || 'e' `List.elem` s || 'E' `List.elem`  s)
     b = BSLC.pack s
     in if p then b
             else BSLC.cons '^' b

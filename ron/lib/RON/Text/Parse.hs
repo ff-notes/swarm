@@ -341,9 +341,9 @@ atom prevUuid = skipSpace *> atom'
 
 atomUnprefixed :: UUID -> Parser Atom
 atomUnprefixed prevUuid =
-    AFloat                             <$> unambiguousDouble <+>
-    AInteger                           <$> integer <+>
-    AUuid                              <$> uuidUnzipped
+    (AFloat   <$> unambiguousDouble) <+>
+    (AInteger <$> integer          ) <+>
+    (AUuid    <$> uuidUnzipped     )
   where
     integer = signed decimal
     uuidUnzipped = uuid22 <+> uuid11 <+> uuidZip'
