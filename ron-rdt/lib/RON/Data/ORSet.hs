@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -20,6 +21,15 @@ module RON.Data.ORSet (
     removeRef,
     removeValue,
     zoomItem,
+    -- * struct_set
+    assignField,
+    newStruct,
+    viewField,
+    viewFieldLWW,
+    viewFieldMax,
+    viewFieldMin,
+    viewFieldSet,
+    zoomFieldObject,
 ) where
 
 import           RON.Prelude
@@ -27,12 +37,14 @@ import           RON.Prelude
 import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal
-import           RON.Error (MonadE, throwErrorText)
+import           RON.Error (MonadE, errorContext, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Semilattice (Semilattice)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId), Payload,
-                            StateChunk (StateChunk, stateBody, stateType), UUID)
+                            StateChunk (StateChunk, stateBody, stateType),
+                            StateFrame, UUID)
+import           RON.Util (Instance (Instance))
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -77,9 +89,15 @@ mkStateChunk stateBody = StateChunk{stateType = setType, stateBody}
 setType :: UUID
 setType = $(UUID.liftName "set")
 
--- | Type-directing wrapper for typed OR-Set
+-- | Type-directing wrapper for typed OR-Set.
+-- 'Eq' instance is purely technical, it doesn't use 'Ord', nor 'Hashable',
+-- so its result may be confusing.
 newtype ORSet a = ORSet [a]
     deriving (Eq, Show)
+{- TODO(2019-07-24, cblp, #102) data family ORSet c a where
+    newtype instance ORSet Ord      a = ORSetOrd  (Set     a)
+    newtype instance ORSet Hashable a = ORSetHash (HashSet a)
+-}
 
 instance Replicated a => Replicated (ORSet a) where
     encoding = objectEncoding
@@ -198,7 +216,7 @@ findAnyAlive = do
     StateChunk{stateBody} <- getObjectStateChunk
     pure $ let
         ORSetRep opMap = stateFromChunk stateBody
-        aliveItems = [op | op@Op{refId = UUID.Zero} <- toList opMap]
+        aliveItems = [op | op@Op{refId = Zero} <- toList opMap]
         in
         case listToMaybe aliveItems of
             Nothing       -> Nothing
@@ -214,3 +232,145 @@ findAnyAlive' = do
         Nothing -> throwErrorText "empty set"
 
 type ORSetMap k v = ORSet (k, v)
+
+-- | Assign a value to a field
+assignField
+    :: (Replicated field, ReplicaClock m, MonadE m, MonadObjectState struct m)
+    => UUID   -- ^ Field name
+    -> field  -- ^ Value
+    -> m ()
+assignField field value =
+    modifyObjectStateChunk_ $ \StateChunk{stateBody} -> do
+        event <- getEventUuid
+        valuePayload <- newRon value
+        let addOp = Op
+                { opId = event
+                , refId = Zero
+                , payload = AUuid field : valuePayload
+                }
+        let (observed, stateBody1) = partition (isAliveField field) stateBody
+        removeOps <- for observed $ \op -> do
+            tombstone <- getEventUuid  -- TODO(2019-07-10, cblp) sequential
+            pure op{refId = tombstone, payload = [AUuid field]}
+        let stateBody2 = sortOn opId $ addOp : removeOps ++ stateBody1
+        pure StateChunk{stateBody = stateBody2, stateType = setType}
+
+isAliveField :: UUID -> Op -> Bool
+isAliveField field = \case
+    Op{refId = Zero, payload = AUuid field' : _} -> field == field'
+    _ -> False
+
+filterAliveFieldPayloads
+    :: UUID               -- ^ field
+    -> [Op]               -- ^ state body
+    -> [Payload]  -- ^ value payloads
+filterAliveFieldPayloads field ops =
+    [ valuePayload
+    | Op{refId = Zero, payload = AUuid field' : valuePayload} <- ops
+    , field' == field
+    ]
+
+filterAliveFieldIdsAndPayloads
+    :: UUID               -- ^ field
+    -> [Op]               -- ^ state body
+    -> [(UUID, Payload)]  -- ^ op ids and value payloads
+filterAliveFieldIdsAndPayloads field ops =
+    [ (opId, valuePayload)
+    | Op{opId, refId = Zero, payload = AUuid field' : valuePayload} <- ops
+    , field' == field
+    ]
+
+-- | Decode field value, merge all versions, return 'Nothing' if no versions
+viewField
+    :: (MonadE m, MonadState StateFrame m, ReplicatedBoundedSemilattice a)
+    => UUID        -- ^ Field name
+    -> StateChunk  -- ^ ORSet object chunk
+    -> m (Maybe a)
+viewField field StateChunk{stateBody} =
+    case filterAliveFieldPayloads field stateBody of
+        []   -> pure Nothing
+        p:ps -> fmap Just . rconcat $ p :| ps
+
+-- | Decode field value, keep last version only
+viewFieldLWW
+    :: (MonadE m, MonadState StateFrame m, Replicated a)
+    => UUID         -- ^ Field name
+    -> StateChunk   -- ^ ORSet object chunk
+    -> m (Maybe a)
+viewFieldLWW field StateChunk{stateBody} =
+    errorContext "ORSet.viewFieldLWW" $
+    traverse fromRon $
+    fmap snd . maximumMayOn fst $
+    filterAliveFieldIdsAndPayloads field stateBody
+
+-- | Decode field value, keep max value only, only for Integer and Float
+viewFieldMax
+    :: (MonadE m, Ord a, ReplicatedAsPayload a)
+    => UUID         -- ^ Field name
+    -> StateChunk   -- ^ ORSet object chunk
+    -> m (Maybe a)
+viewFieldMax field StateChunk{stateBody} =
+    errorContext "ORSet.viewFieldMax" $
+    fmap maximumMay $
+    traverse fromPayload $
+    filterAliveFieldPayloads field stateBody
+
+-- | Decode field value, keep min value only, only for Integer and Float
+viewFieldMin
+    :: (MonadE m, Ord a, ReplicatedAsPayload a)
+    => UUID         -- ^ Field name
+    -> StateChunk   -- ^ ORSet object chunk
+    -> m (Maybe a)
+viewFieldMin field StateChunk{stateBody} =
+    errorContext "ORSet.viewFieldMin" $
+    fmap minimumMay $
+    traverse fromPayload $
+    filterAliveFieldPayloads field stateBody
+
+-- | Decode field value, keep all versions
+viewFieldSet
+    :: (MonadE m, MonadState StateFrame m, Replicated a)
+    => UUID         -- ^ Field name
+    -> StateChunk   -- ^ ORSet object chunk
+    -> m [a]
+viewFieldSet field StateChunk{stateBody} =
+    errorContext "ORSet.viewFieldSet" $
+    traverse fromRon $
+    filterAliveFieldPayloads field stateBody
+
+-- | Pseudo-lens to an object inside a specified field
+zoomFieldObject
+    :: forall a field m struct
+    . (MonadE m, ReplicaClock m, ReplicatedAsObject field)
+    => UUID                     -- ^ Field name
+    -> ObjectStateT field  m a  -- ^ Inner object modifier
+    -> ObjectStateT struct m a
+zoomFieldObject field innerModifier =
+    errorContext ("ORSet.zoomFieldObject" <> show field) $ do
+        StateChunk{stateBody} <- getObjectStateChunk
+        let objectIds =
+                [ objectId
+                | AUuid objectId : _ <- filterAliveFieldPayloads field stateBody
+                ]
+        object <- case objectIds of
+            []       -> Object <$> getEventUuid  -- create empty object
+            oid:oids -> reduceObjectStates @field $ fmap Object $ oid :| oids
+        lift $ runReaderT innerModifier object
+
+-- | Create an ORSet object from a list of named fields.
+newStruct
+    :: (MonadState StateFrame m, ReplicaClock m)
+    => [(UUID, Maybe (Instance Replicated))] -> m UUID
+newStruct fields = do
+    stateBody <-
+        fmap fold $ for fields $ \(name, values) ->
+            for (toList values) $ \(Instance value) -> do
+                opId <- getEventUuid
+                    -- TODO(2019-07-12, cblp, #15) sequential uuids
+                valuePayload <- newRon value
+                pure Op{opId, refId = Zero, payload = AUuid name : valuePayload}
+    objectId <- getEventUuid
+    modify' $
+        (<>) $ Map.singleton objectId $
+        StateChunk{stateType = setType, stateBody}
+    pure objectId

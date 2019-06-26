@@ -1,7 +1,8 @@
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -10,7 +11,7 @@ module RON.Schema (
     Alias (..),
     CaseTransform (..),
     Declaration (..),
-    Field (..),
+    Field (..), XField,
     FieldAnnotations (..), defaultFieldAnnotations,
     MergeStrategy (..),
     Opaque (..), opaqueAtoms, opaqueAtoms_, opaqueObject,
@@ -18,8 +19,11 @@ module RON.Schema (
     RonType (..),
     Schema,
     Stage (..),
+    Struct (..),
     StructAnnotations (..), defaultStructAnnotations,
-    StructLww (..),
+    StructEncoding (..),
+    StructLww,
+    StructSet,
     TAtom (..),
     TComposite (..),
     TEnum (..),
@@ -33,7 +37,7 @@ import           RON.Prelude
 
 import qualified Data.Text as Text
 
-data Stage = Parsed | Resolved
+data Stage = Parsed | Resolved | Equipped
 
 type TypeName = Text
 
@@ -62,17 +66,24 @@ data TObject
     = TORSet     RonType
     | TORSetMap  RonType RonType
     | TRga       RonType
-    | TStructLww (StructLww 'Resolved)
+    | TStructLww (StructLww Resolved)
+    | TStructSet (StructSet Resolved)
     | TVersionVector
     deriving (Show)
 
-data StructLww stage = StructLww
+data StructEncoding = SELww | SESet
+
+data Struct (encoding :: StructEncoding) stage = Struct
     { name        :: Text
     , fields      :: Map Text (Field stage)
     , annotations :: StructAnnotations
     }
 deriving instance
     (Show (UseType stage), Show (XField stage)) => Show (StructLww stage)
+
+type StructLww = Struct SELww
+
+type StructSet = Struct SESet
 
 data StructAnnotations = StructAnnotations
     { haskellFieldPrefix        :: Text
@@ -109,14 +120,16 @@ type instance XField Parsed = ()
 type instance XField Resolved = ()
 
 type family UseType (stage :: Stage) where
-    UseType 'Parsed   = TypeExpr
-    UseType 'Resolved = RonType
+    UseType Parsed   = TypeExpr
+    UseType Resolved = RonType
+    UseType Equipped = RonType
 
 data Declaration stage
     = DAlias     (Alias stage)
     | DEnum       TEnum
     | DOpaque     Opaque
     | DStructLww (StructLww stage)
+    | DStructSet (StructSet stage)
 deriving instance
     (Show (UseType stage), Show (XField stage)) => Show (Declaration stage)
 

@@ -7,13 +7,14 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module RON.Schema.EDN (readSchema) where
 
 import           RON.Prelude
 
 import           Control.Arrow ((&&&))
-import           Data.EDN (FromEDN, Tagged (NoTag, Tagged),
+import           Data.EDN (FromEDN, Tagged (NoTag, Tagged), TaggedValue,
                            Value (List, Symbol), mapGetSymbol, parseEDN,
                            renderText, unexpected, withList, withMap, withNoTag)
 import           Data.EDN.Class.Parser (Parser, parseM)
@@ -30,7 +31,9 @@ readSchema sourceName source = do
     parsed <- parseSchema sourceName source
     env <- (`execStateT` Env{userTypes=Map.empty}) $ collectDeclarations parsed
     validateParsed env parsed
-    pure $ evalSchema env
+    let resolved = evalSchema env
+    validateResolved resolved
+    pure resolved
 
 newtype Env = Env{userTypes :: Map TypeName (Declaration 'Parsed)}
     deriving (Show)
@@ -67,6 +70,7 @@ instance FromEDN (Declaration 'Parsed) where
             "enum"       -> DEnum      <$> parseList args
             "opaque"     -> DOpaque    <$> parseList args
             "struct_lww" -> DStructLww <$> parseList args
+            "struct_set" -> DStructSet <$> parseList args
             name         -> fail $ "unknown declaration " ++ Text.unpack name
         [] -> fail "empty declaration"
 
@@ -112,38 +116,47 @@ rememberDeclaration decl = do
 
 declarationName :: Declaration stage -> TypeName
 declarationName = \case
-    DAlias     Alias    {name} -> name
-    DEnum      Enum     {name} -> name
-    DOpaque    Opaque   {name} -> name
-    DStructLww StructLww{name} -> name
+    DAlias     Alias {name} -> name
+    DEnum      Enum  {name} -> name
+    DOpaque    Opaque{name} -> name
+    DStructLww Struct{name} -> name
+    DStructSet Struct{name} -> name
 
-instance FromEDN (StructLww 'Parsed) where
-    parseEDN = withNoTag . withList $ \case
-        nameSym : body -> do
-            let (annotationVals, fieldVals) = span isTagged body
-            name        <- parseSymbol' nameSym
-            fields      <- parseFields  fieldVals
+instance FromEDN (StructLww Parsed) where
+    parseEDN = parseStruct "struct_lww"
+
+instance FromEDN (StructSet Parsed) where
+    parseEDN = parseStruct "struct_set"
+
+parseStruct :: String -> TaggedValue -> Parser (Struct encoding Parsed)
+parseStruct keyword = withNoTag . withList $ \case
+    nameSym : body -> do
+        let (annotationVals, fieldVals) = span isTagged body
+        name        <- parseSymbol' nameSym
+        fields      <- parseFields fieldVals
+        annotations <- parseList annotationVals
+        pure Struct{..}
+    [] ->
+        fail
+            $  "Expected declaration in the form ("
+            ++ keyword
+            ++ " <name:symbol> <annotations>... <fields>...)"
+
+  where
+
+    parseFields = \case
+        [] -> pure mempty
+        nameVal : typeVal : cont -> do
+            let (annotationVals, cont') = span isTagged cont
+            name        <- parseSymbol' nameVal
+            ronType     <- parseEDN     typeVal
             annotations <- parseList    annotationVals
-            pure StructLww{name, fields, annotations}
-        [] -> fail
-            "Expected declaration in the form\
-            \ (struct_lww <name:symbol> <annotations>... <fields>...)"
-
-      where
-
-        parseFields = \case
-            [] -> pure mempty
-            nameVal : typeVal : cont -> do
-                let (annotationVals, cont') = span isTagged cont
-                name        <- parseSymbol' nameVal
-                ronType     <- parseEDN     typeVal
-                annotations <- parseList    annotationVals
-                let field = Field{ronType, annotations, ext = ()}
-                fields' <- parseFields cont'
-                pure $ Map.insert name field fields'
-            [f] ->
-                fail $
-                "field " ++ Text.unpack (renderText f) ++ " must have type"
+            let field = Field{ronType, annotations, ext = ()}
+            fields' <- parseFields cont'
+            pure $ Map.insert name field fields'
+        [f] ->
+            fail $
+            "field " ++ Text.unpack (renderText f) ++ " must have type"
 
 instance FromEDN StructAnnotations where
     parseEDN = withNoTag . withList $ \annTaggedValues -> do
@@ -184,23 +197,81 @@ instance FromEDN TypeExpr where
 collectDeclarations :: (MonadFail m, MonadState Env m) => Schema 'Parsed -> m ()
 collectDeclarations = traverse_ rememberDeclaration
 
-validateParsed :: MonadFail m => Env -> Schema 'Parsed -> m ()
+validateParsed :: MonadFail m => Env -> Schema Parsed -> m ()
 validateParsed Env{userTypes} = traverse_ $ \case
-    DAlias     Alias{target}     -> validateExpr target
-    DEnum      _                 -> pure ()
-    DOpaque    _                 -> pure ()
-    DStructLww StructLww{fields} ->
-        for_ fields $ \Field{ronType} -> validateExpr ronType
+    DAlias     Alias{target}  -> validateExpr target
+    DEnum      _              -> pure ()
+    DOpaque    _              -> pure ()
+    DStructLww Struct{fields} -> validateStruct fields
+    DStructSet Struct{fields} -> validateStruct fields
   where
     validateName name =
         unless
             (name `Map.member` userTypes || name `Map.member` prelude)
-            (fail $ "unknown type name " ++ Text.unpack name)
+            (fail $ "validateParsed: unknown type name " ++ Text.unpack name)
     validateExpr = \case
         Use name -> validateName name
         Apply name args -> do
             validateName name
             for_ args validateExpr
+    validateStruct =
+        traverse_ $ \Field{ronType} -> validateExpr ronType
+
+validateResolved :: MonadFail m => Schema Resolved -> m ()
+validateResolved = traverse_ $ \case
+    DAlias     _                    -> pure ()
+    DEnum      _                    -> pure ()
+    DOpaque    _                    -> pure ()
+    DStructLww _                    -> pure ()
+    DStructSet Struct{name, fields} -> validateSetFields name fields
+  where
+    validateSetFields structName fields =
+        void $ Map.traverseWithKey validateField fields
+      where
+        validateField fieldName field =
+            case ronType of
+                TAtom       a   -> goAtom a
+                TComposite  c   -> case c of
+                    TEnum   _   -> goAtom TAUuid
+                    TOption t   -> validateField fieldName field{ronType = t}
+                TObject     _   -> goObject
+                TOpaque     Opaque{isObject}
+                    | isObject  -> goObject
+                    | otherwise -> goOpaqueAtoms
+          where
+            Field{ronType, annotations} = field
+            FieldAnnotations{mergeStrategy} = annotations
+            goAtom a = case mergeStrategy of
+                Nothing ->
+                    fail'
+                        "atom field must be declared with #ron{merge strategy}"
+                Just ms -> case (ms, a) of
+                    (LWW, _)         -> pure ()
+                    (Set, _)         -> pure ()
+                    (Max, TAInteger) -> pure ()
+                    (Max, TAFloat)   -> pure ()
+                    (Min, TAInteger) -> pure ()
+                    (Min, TAFloat)   -> pure ()
+                    (Max, _)         ->
+                        fail'
+                            "max strategy requires either integer or float\
+                            \ field"
+                    (Min, _)         ->
+                        fail'
+                            "min strategy requires either integer or float\
+                            \ field"
+            goOpaqueAtoms = case mergeStrategy of
+                Nothing ->
+                    fail'
+                        "opaque atoms field must be declared with\
+                        \ #ron{merge strategy}"
+                Just _  -> pure ()
+            goObject = case mergeStrategy of
+                Nothing -> pure ()
+                Just _  -> fail' "object field must not declared merge strategy"
+            fail' msg =
+                fail $
+                    Text.unpack $ structName <> "." <> fieldName <> ": " <> msg
 
 evalSchema :: Env -> Schema 'Resolved
 evalSchema env = fst <$> userTypes' where
@@ -216,9 +287,11 @@ evalSchema env = fst <$> userTypes' where
         DOpaque    t -> (DOpaque t, Type0 $ TOpaque t)
         DStructLww s ->
             (DStructLww &&& Type0 . TObject . TStructLww) $ evalStruct s
+        DStructSet s ->
+            (DStructSet &&& Type0 . TObject . TStructSet) $ evalStruct s
 
-    evalStruct :: StructLww Parsed -> StructLww Resolved
-    evalStruct StructLww{..} = StructLww{fields = evalField <$> fields, ..}
+    evalStruct :: Struct encoding Parsed -> Struct encoding Resolved
+    evalStruct Struct{..} = Struct{fields = evalField <$> fields, ..}
 
     evalField :: Field Parsed -> Field Resolved
     evalField Field{..} = Field{ronType = evalType ronType, ..}
