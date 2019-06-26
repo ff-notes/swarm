@@ -44,7 +44,7 @@
 
         note as instances_ReplicatedAsPayload1
             as atom:
-            • Bool
+            • Bool (UUID "false" or "true")
             • Char (1-char string)
             • Int64 (integer)
             • Text (string)
