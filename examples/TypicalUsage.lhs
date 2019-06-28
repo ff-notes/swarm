@@ -21,6 +21,6 @@
 >     let dataDir = "./data/"
 >     h <- Storage.newHandle dataDir
 >     runStorage h $ do
->         obj <- newObject
+>         obj <- newObjectState
 >             Note{active = True, text = "Write a task manager"}
 >         createDocument obj

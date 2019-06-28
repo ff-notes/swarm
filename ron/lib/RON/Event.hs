@@ -166,6 +166,11 @@ instance ReplicaClock m => ReplicaClock (StateT s m) where
     getEvents = lift . getEvents
     advance   = lift . advance
 
+instance (ReplicaClock m, Monoid s) => ReplicaClock (WriterT s m) where
+    getPid    = lift   getPid
+    getEvents = lift . getEvents
+    advance   = lift . advance
+
 -- | 'advance' variant for any UUID
 advanceToUuid :: ReplicaClock clock => UUID -> clock ()
 advanceToUuid = advance . uuidValue . UUID.split

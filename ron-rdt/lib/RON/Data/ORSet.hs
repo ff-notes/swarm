@@ -11,7 +11,6 @@
 module RON.Data.ORSet
     ( ORSet (..)
     , ORSetRaw
-    , addNewRef
     , addRef
     , addValue
     , removeRef
@@ -25,10 +24,11 @@ import qualified Data.Map.Strict as Map
 import           RON.Data.Internal
 import           RON.Error (MonadE)
 import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
-import           RON.Types (Atom, Object (Object, frame, id),
+import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
                             StateChunk (StateChunk, stateBody, stateType, stateVersion),
-                            UUID)
+                            StateFrame, UUID)
+import           RON.Util (runStateAsWriter)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -75,23 +75,23 @@ instance Replicated a => Replicated (ORSet a) where
 instance Replicated a => ReplicatedAsObject (ORSet a) where
     objectOpType = setType
 
-    newObjectW (ORSet items) = do
+    newObject (ORSet items) = do
         ops <- for items $ \item -> do
-            event <- lift getEventUuid
+            event <- getEventUuid
             payload <- newRon item
             pure $ Op event Zero payload
-        oid <- lift getEventUuid
+        oid <- getEventUuid
         let stateVersion = maximumDef oid $ map opId ops
-        tell $
-            Map.singleton oid $
+        modify' $
+            (<>) $ Map.singleton oid $
             StateChunk{stateType = setType, stateVersion, stateBody = ops}
-        pure oid
+        pure $ Object oid
 
-    getObject obj@Object{frame} = do
+    getObject obj = do
         StateChunk{stateBody} <- getObjectStateChunk obj
         mItems <- for stateBody $ \Op{refId, payload} -> case refId of
             Zero -> do
-                item <- fromRon payload frame
+                item <- fromRon payload
                 pure $ Just item
             _    -> pure Nothing
         pure . ORSet $ catMaybes mItems
@@ -106,48 +106,46 @@ prepareModify = do
     pure (obj, stateBody)
 
 -- | XXX Internal. Common implementation of 'addValue' and 'addRef'.
-commonAdd :: (ReplicatedAsPayload b, ReplicaClock m, MonadE m)
-    => b -> StateT (Object a) m ()
-commonAdd item = do
-    (obj@Object{id, frame}, stateBody) <- prepareModify
+-- commonAdd ::
+-- commonAdd =
+
+-- | Encode a value and add a it to the OR-Set
+addValue
+    :: (Replicated a, ReplicaClock m, MonadE m, MonadState StateFrame m)
+    => a -> Object (ORSet a) -> m ()
+addValue item self = do
+    StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
+    advanceToUuid stateVersion
     event <- getEventUuid
-    let payload = toPayload item
+    payload <- runStateAsWriter $ newRon item
     let newOp = Op event Zero payload
     let chunk' = stateBody ++ [newOp]
     let state' = StateChunk
             {stateType = setType, stateVersion = event, stateBody = chunk'}
-    put obj{frame = Map.insert id state' frame}
+    let Object setUuid = self
+    modify' $ Map.insert setUuid state'
 
--- | Add atomic value to the OR-Set
-addValue
-    :: (ReplicatedAsPayload a, ReplicaClock m, MonadE m)
-    => a -> StateT (Object (ORSet a)) m ()
-addValue = commonAdd
-
--- | Add a reference to the object to the OR-Set
 addRef
-    :: (ReplicaClock m, MonadE m) => Object a -> StateT (Object (ORSet a)) m ()
-addRef Object{id = itemId, frame = itemFrame} = do
-    modify' $ \Object{..} -> Object{frame = frame <> itemFrame, ..}
-    commonAdd itemId
-
--- | Encode an object and add a reference to it to the OR-Set
-addNewRef
-    :: forall a m
-    . (ReplicatedAsObject a, ReplicaClock m, MonadE m)
-    => a -> StateT (Object (ORSet a)) m (Object a)
-addNewRef item = do
-    itemObj@(Object _ itemFrame) <- lift $ newObject item
-    modify' $ \Object{..} -> Object{frame = frame <> itemFrame, ..}
-    addRef itemObj
-    pure itemObj
+    :: (ReplicaClock m, MonadE m, MonadState StateFrame m)
+    => Object a -> Object (ORSet a) -> m ()
+addRef (Object itemUuid) self = do
+    StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
+    advanceToUuid stateVersion
+    event <- getEventUuid
+    let newOp = Op event Zero [AUuid itemUuid]
+    let chunk' = stateBody ++ [newOp]
+    let state' = StateChunk
+            {stateType = setType, stateVersion = event, stateBody = chunk'}
+    let Object setUuid = self
+    modify' $ Map.insert setUuid state'
 
 -- | XXX Internal. Common implementation of 'removeValue' and 'removeRef'.
 commonRemove
-    :: (MonadE m, ReplicaClock m)
-    => ([Atom] -> Bool) -> StateT (Object (orset a)) m ()
-commonRemove isTarget = do
-    (obj@Object{id, frame}, stateBody) <- prepareModify
+    :: (MonadE m, ReplicaClock m, MonadState StateFrame m)
+    => ([Atom] -> Bool) -> Object (ORSet a) -> m ()
+commonRemove isTarget self@(Object selfUuid) = do
+    StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
+    advanceToUuid stateVersion
     let state0@(ORSetRaw opMap) = stateFromChunk stateBody
     let targetEvents =
             [ opId
@@ -165,15 +163,18 @@ commonRemove isTarget = do
                     ]
             let chunk' = state0 <> stateFromChunk patch
             let state' = stateToChunk chunk'
-            put obj{frame = Map.insert id state' frame}
+            modify' $ Map.insert selfUuid state'
 
 -- | Remove an atomic value from the OR-Set
 removeValue
-    :: (ReplicatedAsPayload a, MonadE m, ReplicaClock m)
-    => a -> StateT (Object (ORSet a)) m ()
-removeValue = commonRemove . eqPayload
+    ::  ( ReplicatedAsPayload a
+        , MonadE m, ReplicaClock m, MonadState StateFrame m
+        )
+    => a -> Object (ORSet a) -> m ()
+removeValue a self = commonRemove (eqPayload a) self
 
 -- | Remove an object reference from the OR-Set
 removeRef
-    :: (MonadE m, ReplicaClock m) => Object a -> StateT (Object (ORSet a)) m ()
+    :: (MonadE m, ReplicaClock m, MonadState StateFrame m)
+    => Object a -> Object (ORSet a) -> m ()
 removeRef = commonRemove . eqRef

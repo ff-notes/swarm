@@ -9,12 +9,13 @@ import qualified Data.Text.IO as Text
 import           Data.Text.Metrics (levenshteinNorm)
 import           System.IO (print)
 
-import           RON.Data (reduceObject)
+import           RON.Data (evalObjectState, execObjectState, newObjectStateWith,
+                           reduceObject)
 import           RON.Data.RGA (RgaString)
 import qualified RON.Data.RGA as RGA
 import           RON.Event (applicationSpecific)
 import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
-import           RON.Types (Object)
+import           RON.Types (ObjectState)
 
 main :: IO ()
 main = do
@@ -59,21 +60,21 @@ stems word
         | suffix <- ["ed", "es"], Just s <- [Text.stripSuffix suffix word]
         ]
 
-rgaTrick1 :: Text -> Text -> (Object RgaString, Object RgaString)
+rgaTrick1 :: Text -> Text -> (ObjectState RgaString, ObjectState RgaString)
 rgaTrick1 begin branch1 =
     either (error . show) identity .
     runNetworkSim . runReplicaSim (applicationSpecific 1) . runExceptT $ do
-        begin' <- RGA.newFromText begin
-        branch1' <- (`execStateT` begin') $ RGA.editText branch1
+        begin'   <- newObjectStateWith     $ RGA.newFromText begin
+        branch1' <- execObjectState begin' $ RGA.editText branch1
         pure (begin', branch1')
 
-rgaTrick2 :: (Object RgaString, Object RgaString) -> Text -> Text
+rgaTrick2 :: (ObjectState RgaString, ObjectState RgaString) -> Text -> Text
 rgaTrick2 (begin', branch1') branch2 =
     either (error . show) identity .
     runNetworkSim . runReplicaSim (applicationSpecific 2) . runExceptT $ do
-        branch2' <- (`execStateT` begin') $ RGA.editText branch2
-        end' <- reduceObject branch1' branch2'
-        RGA.getText end'
+        branch2' <- execObjectState begin' $ RGA.editText branch2
+        end'     <- reduceObject branch1' branch2'
+        evalObjectState end' RGA.getText
 
 {-
 Found

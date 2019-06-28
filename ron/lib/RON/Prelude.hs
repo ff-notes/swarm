@@ -25,13 +25,13 @@ import           Control.Applicative as X (Alternative, Applicative, liftA2,
                                            (<*), (<*>), (<|>))
 import           Control.Exception as X (Exception, catch, evaluate, throwIO)
 import           Control.Monad as X (Monad, filterM, guard, unless, void, when,
-                                     (<=<), (=<<), (>=>), (>>=), (>>))
+                                     (<=<), (=<<), (>=>), (>>), (>>=))
 import           Control.Monad.Except as X (ExceptT, MonadError, catchError,
                                             liftEither, runExceptT, throwError)
 import           Control.Monad.Fail as X (MonadFail, fail)
 import           Control.Monad.IO.Class as X (MonadIO, liftIO)
-import           Control.Monad.Reader as X (ReaderT (ReaderT), ask, reader,
-                                            runReaderT)
+import           Control.Monad.Reader as X (MonadReader, ReaderT (ReaderT), ask,
+                                            reader, runReaderT)
 import           Control.Monad.State.Strict as X (MonadState, State, StateT,
                                                   evalState, evalStateT,
                                                   execStateT, get, gets,
@@ -52,7 +52,7 @@ import           Data.Foldable as X (Foldable, and, asum, fold, foldMap, foldl',
                                      foldr, for_, length, minimumBy, null, or,
                                      toList, traverse_)
 import           Data.Function as X (const, flip, on, ($), (.))
-import           Data.Functor as X (Functor, fmap, ($>), (<$), (<$>))
+import           Data.Functor as X (Functor, fmap, ($>), (<$), (<$>), (<&>))
 import           Data.Functor.Identity as X (Identity)
 import           Data.Hashable as X (Hashable, hash)
 import           Data.HashMap.Strict as X (HashMap)

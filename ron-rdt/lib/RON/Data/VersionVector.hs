@@ -15,7 +15,8 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal
 import           RON.Event (getEventUuid)
-import           RON.Types (Op (..), StateChunk (..), UUID (UUID))
+import           RON.Types (Object (Object), Op (..), StateChunk (..),
+                            UUID (UUID))
 import qualified RON.UUID as UUID
 
 type Origin = Word64
@@ -60,15 +61,15 @@ instance Replicated VersionVector where
 instance ReplicatedAsObject VersionVector where
     objectOpType = vvType
 
-    newObjectW (VersionVector vv) = do
-        oid <- lift getEventUuid
+    newObject (VersionVector vv) = do
+        oid <- getEventUuid
         let ops = Map.elems vv
         let stateVersion = maximumDef oid $ map opId ops
-        tell $
-            Map.singleton oid $
+        modify' $
+            (<>) $ Map.singleton oid $
             StateChunk{stateType = vvType, stateVersion, stateBody = ops}
-        pure oid
+        pure $ Object oid
 
     getObject obj = do
-        StateChunk{..} <- getObjectStateChunk obj
+        StateChunk{stateBody} <- getObjectStateChunk obj
         pure $ stateFromChunk stateBody

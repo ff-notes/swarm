@@ -30,7 +30,7 @@ import           RON.Data (ReplicatedAsObject)
 import           RON.Error (MonadE, liftMaybe, throwErrorString)
 import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Text (parseStateFrame, serializeStateFrame)
-import           RON.Types (Object (Object, frame, id), UUID)
+import           RON.Types (ObjectState (ObjectState, frame, id), UUID)
 import           RON.Util (ByteStringL)
 import qualified RON.UUID as UUID
 
@@ -55,7 +55,7 @@ class (ReplicatedAsObject a, Typeable a) => Collection a where
     collectionName :: CollectionName
 
     -- | Called when RON parser fails.
-    fallbackParse :: MonadE m => UUID -> ByteStringL -> m (Object a)
+    fallbackParse :: MonadE m => UUID -> ByteStringL -> m (ObjectState a)
     fallbackParse _ _ = throwError "no fallback parser implemented"
 
 -- | Storage backend interface
@@ -89,7 +89,7 @@ decodeDocId (DocId file) = do
 -- | Load document version as an object
 readVersion
     :: MonadStorage m
-    => Collection a => DocId a -> DocVersion -> m (Object a, IsTouched)
+    => Collection a => DocId a -> DocVersion -> m (ObjectState a, IsTouched)
 readVersion docid version = do
     (isObjectIdValid, id) <-
         liftMaybe ("Bad Base32 UUID " <> show docid) $
@@ -99,7 +99,7 @@ readVersion docid version = do
     contents <- loadVersionContent docid version
     case parseStateFrame contents of
         Right frame ->
-            pure (Object{id, frame}, IsTouched False)
+            pure (ObjectState{id, frame}, IsTouched False)
         Left ronError ->
             do  object <- fallbackParse id contents
                 pure (object, IsTouched True)
@@ -115,7 +115,7 @@ newtype IsTouched = IsTouched Bool
 
 -- | Result of DB reading, loaded document with information about its versions
 data Document a = Document
-    { value     :: Object a
+    { value     :: ObjectState a
         -- ^ Merged value.
     , versions  :: NonEmpty DocVersion
     , isTouched :: IsTouched
@@ -129,7 +129,7 @@ createVersion
     . (Collection a, MonadStorage m)
     => Maybe (DocId a, Document a)
         -- ^ 'Just', if document exists already; 'Nothing' otherwise.
-    -> Object a
+    -> ObjectState a
     -> m ()
 createVersion mDoc newObj = case mDoc of
     Nothing -> save (DocId @a $ UUID.encodeBase32 id) []
@@ -139,7 +139,7 @@ createVersion mDoc newObj = case mDoc of
         when (newObj /= oldObj || length versions /= 1 || isTouched) $
             save docid $ toList versions
   where
-    Object{id, frame} = newObj
+    ObjectState{id, frame} = newObj
 
     save docid oldVersions = do
         newVersion <- UUID.encodeBase32 <$> getEventUuid

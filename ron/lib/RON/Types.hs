@@ -18,6 +18,7 @@ module RON.Types (
     Atom (..),
     ClosedOp (..),
     Object (..),
+    ObjectState (..),
     Op (..),
     OpPattern (..),
     OpTerm (..),
@@ -109,8 +110,11 @@ data StateChunk = StateChunk
 -- | Frame containing only state chunks
 type StateFrame = Map UUID StateChunk
 
--- | Reference to an object inside a frame.
-data Object a = Object{id :: UUID, frame :: StateFrame}
+-- | Reference to an object
+newtype Object a = Object UUID
+
+-- | Object accompanied with a frame
+data ObjectState a = ObjectState{id :: UUID, frame :: StateFrame}
     deriving (Eq, Show)
 
 data OpPattern =

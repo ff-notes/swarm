@@ -19,16 +19,17 @@ module RON.Data.Internal (
     ReplicatedAsPayload (..),
     Unapplied,
     WireReducer,
-    collectFrame,
     eqPayload,
     eqRef,
-    fromRon,
     getObjectStateChunk,
     mkStateChunk,
-    newObject,
-    newRon,
+    newObjectState,
+    --
     objectEncoding,
     payloadEncoding,
+    --
+    fromRon,
+    newRon,
 ) where
 
 import           RON.Prelude
@@ -39,7 +40,7 @@ import qualified Data.Text as Text
 import           RON.Error (MonadE, errorContext, liftMaybe)
 import           RON.Event (ReplicaClock)
 import           RON.Types (Atom (AInteger, AString, AUuid), Object (Object),
-                            Op (Op, opId),
+                            ObjectState (ObjectState, frame, id), Op (Op, opId),
                             StateChunk (StateChunk, stateBody, stateType, stateVersion),
                             StateFrame, UUID (UUID), WireChunk)
 import           RON.UUID (zero)
@@ -131,26 +132,28 @@ class Replicated a where
 
 data Encoding a = Encoding
     { encodingNewRon
-        :: forall m . ReplicaClock m => a -> WriterT StateFrame m [Atom]
-    , encodingFromRon :: forall m . MonadE m => [Atom] -> StateFrame -> m a
+        :: forall m
+        . (ReplicaClock m, MonadState StateFrame m) => a -> m [Atom]
+    , encodingFromRon
+        :: forall m . (MonadE m, MonadState StateFrame m) => [Atom] -> m a
     }
 
 -- | Encode typed data to a payload with possible addition objects
-newRon :: (Replicated a, ReplicaClock m) => a -> WriterT StateFrame m [Atom]
+newRon
+    :: (Replicated a, ReplicaClock m, MonadState StateFrame m) => a -> m [Atom]
 newRon = encodingNewRon encoding
 
 -- | Decode typed data from a payload.
 -- The implementation may use other objects in the frame to resolve references.
 -- TODO(2019-06-28, cblp) use 'ReaderT' for symmetry with 'newRon'
-fromRon :: (MonadE m, Replicated a) => [Atom] -> StateFrame -> m a
+fromRon :: (MonadE m, Replicated a, MonadState StateFrame m) => [Atom] -> m a
 fromRon = encodingFromRon encoding
 
 -- | Standard implementation of 'Replicated' for 'ReplicatedAsObject' types.
 objectEncoding :: ReplicatedAsObject a => Encoding a
 objectEncoding = Encoding
     { encodingNewRon = \a -> do
-        Object oid frame <- lift $ newObject a
-        tell frame
+        Object oid <- newObject a
         pure [AUuid oid]
     , encodingFromRon = objectFromRon getObject
     }
@@ -159,7 +162,7 @@ objectEncoding = Encoding
 payloadEncoding :: ReplicatedAsPayload a => Encoding a
 payloadEncoding = Encoding
     { encodingNewRon  = pure . toPayload
-    , encodingFromRon = \atoms _ -> fromPayload atoms
+    , encodingFromRon = \atoms -> fromPayload atoms
     }
 
 -- | Instances of this class are encoded as payload only.
@@ -211,29 +214,31 @@ class Replicated a => ReplicatedAsObject a where
     objectOpType :: UUID
 
     -- | Encode data. Write frame and return id.
-    newObjectW :: ReplicaClock m => a -> WriterT StateFrame m UUID
+    newObject :: (ReplicaClock m, MonadState StateFrame m) => a -> m (Object a)
 
     -- | Decode data
-    getObject :: MonadE m => Object a -> m a
+    getObject :: (MonadE m, MonadState StateFrame m) => Object a -> m a
 
-objectFromRon :: MonadE m => (Object a -> m a) -> [Atom] -> StateFrame -> m a
-objectFromRon handler atoms frame = case atoms of
-    [AUuid oid] -> handler $ Object oid frame
+objectFromRon :: MonadE m => (Object a -> m a) -> [Atom] -> m a
+objectFromRon handler atoms = case atoms of
+    [AUuid oid] -> handler $ Object oid
     _           -> throwError "Expected object UUID"
 
--- | Helper to build an object frame using arbitrarily nested serializers.
-collectFrame :: Functor m => WriterT StateFrame m UUID -> m (Object a)
-collectFrame = fmap (uncurry Object) . runWriterT
+-- | Create new 'ObjectState' from a value
+newObjectState
+    :: (ReplicatedAsObject a, ReplicaClock m) => a -> m (ObjectState a)
+newObjectState a = do
+    (Object id, frame) <- runStateT (newObject a) mempty
+    pure $ ObjectState{id, frame}
 
-newObject :: (ReplicatedAsObject a, ReplicaClock m) => a -> m (Object a)
-newObject = collectFrame . newObjectW
-
-getObjectStateChunk :: MonadE m => Object a -> m StateChunk
-getObjectStateChunk (Object oid frame) =
+getObjectStateChunk
+    :: (MonadE m, MonadState StateFrame m) => Object a -> m StateChunk
+getObjectStateChunk (Object oid) = do
+    frame <- get
     liftMaybe "no such object in chunk" $ Map.lookup oid frame
 
 eqRef :: Object a -> [Atom] -> Bool
-eqRef (Object oid _) atoms = case atoms of
+eqRef (Object oid) atoms = case atoms of
     [AUuid ref] -> oid == ref
     _           -> False
 
@@ -251,9 +256,9 @@ instance Replicated a => Replicated (Maybe a) where
         { encodingNewRon = \case
             Just a  -> (Some :) <$> newRon a
             Nothing -> pure [None]
-        , encodingFromRon = \atoms frame ->
+        , encodingFromRon = \atoms ->
             errorContext "Option" $ case atoms of
-                Some : atoms' -> Just <$> fromRon atoms' frame
+                Some : atoms' -> Just <$> fromRon atoms'
                 [None]        -> pure Nothing
                 _             -> throwError "Bad Option"
         }

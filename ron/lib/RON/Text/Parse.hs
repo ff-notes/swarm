@@ -37,7 +37,7 @@ import           Data.Maybe (isJust, isNothing)
 
 import qualified RON.Base64 as Base64
 import           RON.Types (Atom (AFloat, AInteger, AString, AUuid),
-                            ClosedOp (..), Object (Object), Op (..),
+                            ClosedOp (..), ObjectState (ObjectState), Op (..),
                             OpTerm (TClosed, THeader, TQuery, TReduced),
                             StateChunk (..), StateFrame, UUID (UUID),
                             WireChunk (Closed, Query, Value), WireFrame,
@@ -373,8 +373,8 @@ parseStateFrame :: ByteStringL -> Either String StateFrame
 parseStateFrame = parseWireFrame >=> findObjects
 
 -- | Parse a state frame as an object
-parseObject :: UUID -> ByteStringL -> Either String (Object a)
-parseObject oid bytes = Object oid <$> parseStateFrame bytes
+parseObject :: UUID -> ByteStringL -> Either String (ObjectState a)
+parseObject oid bytes = ObjectState oid <$> parseStateFrame bytes
 
 -- | Extract object states from a common frame
 findObjects :: WireFrame -> Either String StateFrame

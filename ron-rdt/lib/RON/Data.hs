@@ -17,13 +17,21 @@ module RON.Data (
     fromRon,
     getObjectStateChunk,
     mkStateChunk,
-    newObject,
     newRon,
     objectEncoding,
     payloadEncoding,
     reduceObject,
     reduceStateFrame,
     reduceWireFrame,
+    -- * 'ObjectState' monad
+    evalObjectState,
+    evalObjectState_,
+    execObjectState,
+    execObjectState_,
+    newObjectState,
+    newObjectStateWith,
+    runObjectState,
+    runObjectState_,
 ) where
 
 import           RON.Prelude
@@ -38,10 +46,10 @@ import           RON.Data.ORSet (ORSetRaw)
 import           RON.Data.RGA (RgaRaw)
 import           RON.Data.VersionVector (VersionVector)
 import           RON.Error (MonadE, throwErrorString)
-import           RON.Types (ClosedOp (..), Object (..), Op (..),
-                            StateChunk (..), StateFrame, UUID,
-                            WireChunk (Closed, Query, Value), WireFrame,
-                            WireReducedChunk (..))
+import           RON.Types (ClosedOp (..), Object (Object),
+                            ObjectState (ObjectState), Op (..), StateChunk (..),
+                            StateFrame, UUID, WireChunk (Closed, Query, Value),
+                            WireFrame, WireReducedChunk (..), frame, id)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -173,14 +181,15 @@ reduceStateFrame s1 s2 =
                 throwErrorString $
                 "Cannot reduce StateFrame of unknown type " ++ show stateType
 
-unsafeReduceObject :: MonadE m => Object a -> StateFrame -> m (Object a)
-unsafeReduceObject obj@Object{frame = s1} s2 = do
+unsafeReduceObject
+    :: MonadE m => ObjectState a -> StateFrame -> m (ObjectState a)
+unsafeReduceObject obj@ObjectState{frame = s1} s2 = do
     frame' <- reduceStateFrame s1 s2
     pure obj{frame = frame'}
 
 -- | Reduce object with frame from another version of the same object.
-reduceObject :: MonadE m => Object a -> Object a -> m (Object a)
-reduceObject o1@Object{id = id1} Object{id = id2, frame = frame2}
+reduceObject :: MonadE m => ObjectState a -> ObjectState a -> m (ObjectState a)
+reduceObject o1@ObjectState{id = id1} ObjectState{id = id2, frame = frame2}
     | id1 == id2 = unsafeReduceObject o1 frame2
     | otherwise  = throwErrorString $ "Object ids differ: " ++ show (id1, id2)
 
@@ -190,3 +199,45 @@ instance Ord a => Semigroup (MaxOnFst a b) where
     mof1@(MaxOnFst (a1, _)) <> mof2@(MaxOnFst (a2, _))
         | a1 < a2   = mof2
         | otherwise = mof1
+
+-- | Run ObjectState action
+evalObjectState
+    :: Monad m => ObjectState b -> (Object b -> StateT StateFrame m a) -> m a
+evalObjectState ObjectState{id, frame} action =
+    evalStateT (action $ Object id) frame
+
+-- | Run ObjectState action, starting with an empty frame
+evalObjectState_ :: Monad m => StateT StateFrame m a -> m a
+evalObjectState_ action = evalStateT action mempty
+
+-- | Run ObjectState action
+execObjectState
+    :: Monad m
+    => ObjectState b -> (Object b -> StateT StateFrame m a) -> m (ObjectState b)
+execObjectState ObjectState{id, frame} action = do
+    frame' <- execStateT (action $ Object id) frame
+    pure ObjectState{id, frame = frame'}
+
+-- | Run ObjectState action, starting with an empty frame
+execObjectState_ :: Monad m => StateT StateFrame m a -> m StateFrame
+execObjectState_ action = execStateT action mempty
+
+-- | Run ObjectState action
+runObjectState
+    :: Functor m
+    => ObjectState b
+    -> (Object b -> StateT StateFrame m a)
+    -> m (a, ObjectState b)
+runObjectState ObjectState{id, frame} action =
+    runStateT (action $ Object id) frame
+    <&> \(a, frame') -> (a, ObjectState{id, frame = frame'})
+
+-- | Run ObjectState action, starting with an empty frame
+runObjectState_ :: StateT StateFrame m a -> m (a, StateFrame)
+runObjectState_ action = runStateT action mempty
+
+-- | Create new 'ObjectState' with an action
+newObjectStateWith
+    :: Functor m => StateT StateFrame m (Object a) -> m (ObjectState a)
+newObjectStateWith action =
+    runObjectState_ action <&> \(Object id, frame) -> ObjectState{id, frame}

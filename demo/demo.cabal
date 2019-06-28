@@ -9,7 +9,6 @@ executable demo
     build-depends:
         base,
         brick,
-        mtl,
         ron,
         ron-rdt,
         ron-storage,

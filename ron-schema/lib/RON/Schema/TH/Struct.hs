@@ -27,9 +27,9 @@ import           RON.Data.RGA (RGA (..))
 import           RON.Error (MonadE, errorContext)
 import           RON.Event (ReplicaClock)
 import           RON.Schema as X
-import           RON.Schema.TH.Common (let1S, liftText, mkGuideType, mkNameT,
+import           RON.Schema.TH.Common (liftText, mkGuideType, mkNameT,
                                        mkViewType, valDP)
-import           RON.Types (Object (Object), UUID)
+import           RON.Types (Object (Object), StateFrame, UUID)
 import           RON.Util (Instance (..))
 import qualified RON.UUID as UUID
 
@@ -84,13 +84,10 @@ mkReplicatedStructLww struct = do
 
     mkInstanceReplicatedAsObject fields = do
         obj   <- TH.newName "obj"
-        frame <- TH.newName "frame"
         ops   <- TH.newName "ops"
         let fieldsToUnpack =
-                [ bindS var [|
-                    LWW.viewField
-                        $(liftData field'RonName) $(varE ops) $(varE frame)
-                    |]
+                [ bindS var
+                    [| LWW.viewField $(liftData field'RonName) $(varE ops) |]
                 | Field'{field'Type, field'Var, field'RonName} <- fields
                 , let
                     fieldP = varP field'Var
@@ -98,13 +95,12 @@ mkReplicatedStructLww struct = do
                         fieldWrapperC field'Type
                 ]
         let getObjectImpl = doE
-                $   let1S [p| Object _ $(varP frame) |] (varE obj)
-                :   bindS (varP ops) [| getObjectStateChunk $(varE obj) |]
+                $   bindS (varP ops) [| getObjectStateChunk $(varE obj) |]
                 :   fieldsToUnpack
                 ++  [noBindS [| pure $consE |]]
         [d| instance ReplicatedAsObject $structT where
                 objectOpType = lwwType
-                newObjectW $consP = LWW.newObjectW $fieldsToPack
+                newObject $consP = Object <$> LWW.newObject $fieldsToPack
                 getObject $(varP obj) =
                     errorContext $(liftText errCtx) $getObjectImpl
             |]
@@ -138,24 +134,27 @@ mkReplicatedStructLww struct = do
         m <- varT <$> TH.newName "m"
         let assignF =
                 [ sigD assign [t|
-                    (ReplicaClock $m, MonadE $m, MonadState $objectT $m)
-                    => $fieldViewType -> $m ()
+                    (ReplicaClock $m, MonadE $m, MonadState StateFrame $m)
+                    => $fieldViewType -> $objectT -> $m ()
                     |]
                 , valDP assign
                     [| LWW.assignField $(liftData field'RonName) . $guide |]
                 ]
             readF =
                 [ sigD read [t|
-                    (MonadE $m, MonadState $objectT $m) => $m $fieldViewType
+                    (MonadE $m, MonadState StateFrame $m)
+                    => $objectT -> $m $fieldViewType
                     |]
                 , valDP read
-                    [| $unguide <$> LWW.readField $(liftData field'RonName) |]
+                    [| fmap $unguide . LWW.readField $(liftData field'RonName)
+                    |]
                 ]
             zoomF =
                 [ sigD zoom [t|
-                    MonadE $m
-                    => StateT (Object $(mkGuideType field'Type)) $m $a
-                    -> StateT $objectT $m $a
+                    (MonadE $m, MonadState StateFrame $m)
+                    => $objectT
+                    -> (Object $(mkGuideType field'Type) -> $m $a)
+                    -> $m $a
                     |]
                 , valDP zoom [| LWW.zoomField $(liftData field'RonName) |]
                 ]

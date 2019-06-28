@@ -15,7 +15,6 @@ import           Brick.Widgets.Edit (Editor, applyEdit, editorText,
 import           Control.Concurrent (forkIO, threadDelay)
 import           Control.Monad (forever, void)
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.State.Strict (execStateT)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           Data.Text.Zipper (TextZipper, cursorPosition, moveCursor,
@@ -23,6 +22,7 @@ import           Data.Text.Zipper (TextZipper, cursorPosition, moveCursor,
 import qualified Data.Text.Zipper as TextZipper
 import           Graphics.Vty (Event (EvKey), Key (KEsc), defAttr,
                                defaultConfig, mkVty)
+import           RON.Data (evalObjectState, execObjectState)
 import           RON.Data.RGA (RgaString)
 import qualified RON.Data.RGA as RGA
 import           RON.Storage.Backend (DocId (DocId), Document (Document),
@@ -41,7 +41,7 @@ main = do
     h <- Storage.newHandle dataDir
     (document, text) <- runStorage h $ do
         document@Document{value = obj} <- loadDocument theDoc
-        text <- RGA.getText obj
+        text <- evalObjectState obj RGA.getText
         pure (document, text)
     rhythm <- mkRhythm
     runUI rhythm (mkApp h) MyState{editor = mkEditor text, document}
@@ -100,12 +100,12 @@ sync storage state@MyState{editor, document} reload =
     runStorage storage $ do
         do  let Document{value = obj} = document
             obj' <-
-                (`execStateT` obj) $
+                execObjectState obj $
                 RGA.editText $ Text.unlines $ getEditContents editor
             createVersion (Just (theDoc, document)) obj'
         if reload then do
             document'@Document{value = obj} <- loadDocument theDoc
-            text <- RGA.getText obj
+            text <- evalObjectState obj RGA.getText
             let editor' = applyEdit (replaceZipper text) editor
             pure MyState{editor = editor', document = document'}
         else

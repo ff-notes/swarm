@@ -12,7 +12,7 @@ module RON.Data.LWW
     ( LwwPerField (..)
     , assignField
     , lwwType
-    , newObjectW
+    , newObject
     , readField
     , viewField
     , zoomField
@@ -30,7 +30,7 @@ import           RON.Error (MonadE, errorContext)
 import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
-import           RON.Util (Instance (Instance))
+import           RON.Util (Instance (Instance), runStateAsWriter)
 import qualified RON.UUID as UUID
 
 -- | Last-Write-Wins: select an op with latter event
@@ -58,14 +58,14 @@ lwwType :: UUID
 lwwType = $(UUID.liftName "lww")
 
 -- | Create LWW object from a list of named fields.
-newObjectW
-    :: ReplicaClock m
-    => [(UUID, Instance Replicated)] -> WriterT StateFrame m UUID
-newObjectW fields = do
+newObject
+    :: (MonadState StateFrame m, ReplicaClock m)
+    => [(UUID, Instance Replicated)] -> m UUID
+newObject fields = do
     payloads <- for fields $ \(_, Instance value) -> newRon value
-    event <- lift getEventUuid
-    tell $
-        Map.singleton event $
+    event <- getEventUuid
+    modify' $
+        (<>) $ Map.singleton event $
         StateChunk
             { stateType = lwwType
             , stateVersion = event
@@ -76,70 +76,64 @@ newObjectW fields = do
 
 -- | Decode field value
 viewField
-    :: (Replicated a, MonadE m)
+    :: (Replicated a, MonadE m, MonadState StateFrame m)
     => UUID        -- ^ Field name
     -> StateChunk  -- ^ LWW object chunk
-    -> StateFrame
     -> m a
-viewField field StateChunk{..} frame =
+viewField field StateChunk{..} =
     errorContext ("LWW.viewField " <> show field) $ do
         let ops = filter (\Op{refId} -> refId == field) stateBody
         Op{payload} <- case ops of
             []   -> throwError "no field in lww chunk"
             [op] -> pure op
             _    -> throwError "unreduced state"
-        fromRon payload frame
+        fromRon payload
 
 -- | Decode field value
 readField
-    :: (MonadE m, MonadState (Object a) m, Replicated b)
+    :: (MonadE m, MonadState StateFrame m, Replicated field)
     => UUID  -- ^ Field name
-    -> m b
-readField field = do
-    obj@Object{..} <- get
-    stateChunk <- getObjectStateChunk obj
-    viewField field stateChunk frame
+    -> Object struct
+    -> m field
+readField field self = do
+    stateChunk <- getObjectStateChunk self
+    viewField field stateChunk
 
 -- | Assign a value to a field
 assignField
-    :: forall a b m
-    . (Replicated b, ReplicaClock m, MonadE m, MonadState (Object a) m)
-    => UUID  -- ^ Field name
-    -> b     -- ^ Value (from untyped world)
+    :: (Replicated field, ReplicaClock m, MonadE m, MonadState StateFrame m)
+    => UUID   -- ^ Field name
+    -> field  -- ^ Value
+    -> Object struct
     -> m ()
-assignField field value = do
-    obj@Object{id, frame} <- get
-    StateChunk{..} <- getObjectStateChunk obj
+assignField field value self@(Object selfUuid) = do
+    StateChunk{stateBody, stateVersion} <- getObjectStateChunk self
     advanceToUuid stateVersion
     let chunk = filter (\Op{refId} -> refId /= field) stateBody
     event <- getEventUuid
-    (p, frame') <- runWriterT $ newRon value
+    p <- runStateAsWriter $ newRon value
     let newOp = Op event field p
     let chunk' = sortOn refId $ newOp : chunk
     let state' = StateChunk
             {stateVersion = event, stateBody = chunk', stateType = lwwType}
-    put obj{frame = Map.insert id state' frame <> frame'}
+    modify' $ Map.insert selfUuid state'
 
--- | Anti-lens to an object inside a specified field
+-- | Pseudo-lens to an object inside a specified field
 zoomField
-    :: MonadE m
-    => UUID                       -- ^ Field name
-    -> StateT (Object inner) m a  -- ^ Nested object modifier
-    -> StateT (Object outer) m a
-zoomField field innerModifier =
+    :: (MonadState StateFrame m, MonadE m)
+    => UUID                   -- ^ Field name
+    -> Object struct
+    -> (Object field -> m a)  -- ^ Inner object modifier
+    -> m a
+zoomField field self innerModifier =
     errorContext ("LWW.zoomField" <> show field) $ do
-        obj@Object{..} <- get
-        StateChunk{..} <- getObjectStateChunk obj
+        StateChunk{stateBody} <- getObjectStateChunk self
         let ops = filter (\Op{refId} -> refId == field) stateBody
         Op{payload} <- case ops of
             []   -> throwError "empty chunk"
             [op] -> pure op
             _    -> throwError "unreduced state"
-        innerObjectId <- errorContext "inner object" $ case payload of
+        fieldObjectId <- errorContext "inner object" $ case payload of
             [AUuid oid] -> pure oid
             _           -> throwError "Expected object UUID"
-        let innerObject = Object innerObjectId frame
-        (a, Object{frame = frame'}) <-
-            lift $ runStateT innerModifier innerObject
-        put obj{frame = frame'}
-        pure a
+        innerModifier $ Object fieldObjectId
