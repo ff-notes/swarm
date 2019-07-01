@@ -181,15 +181,11 @@ uuid11 = label "UUID-RON-11-letter-value" $ do
     rawX <- base64word 11
     guard $ BS.length rawX == 11
     x <- Base64.decode64 rawX ?? fail "Base64.decode64"
-    skipSpace
     rawUuidVersion <- optional pUuidVersion
-    rawOrigin <- optional $ base64word $ maybe 11 (const 10) rawUuidVersion
-    y <- case (rawUuidVersion, BS.length <$> rawOrigin) of
-        (Nothing, Just 11) ->
-            case rawOrigin of
-                Nothing     -> pure 0
-                Just origin -> Base64.decode64 origin ?? fail "Base64.decode64"
+    y <- case rawUuidVersion of
+        Nothing -> pure 0
         _ -> do
+            rawOrigin <- optional $ base64word $ maybe 11 (const 10) rawUuidVersion
             origin <- case rawOrigin of
                 Nothing     -> pure $ ls60 0
                 Just origin -> Base64.decode60 origin ?? fail "Base64.decode60"
@@ -198,13 +194,13 @@ uuid11 = label "UUID-RON-11-letter-value" $ do
 
 data UuidZipBase = PrevOpSameKey | SameOpPrevUuid
 
+{-# DEPRECATED uuidZip "Deprecated since RON 2.1 ." #-}
 uuidZip :: UUID -> UUID -> UuidZipBase -> Parser UUID
 uuidZip prevOpSameKey sameOpPrevUuid defaultZipBase = label "UUID-zip" $ do
     changeZipBase <- isSuccessful $ char '`'
     rawVariety <- optional pVariety
     rawReuseValue <- optional pReuse
     rawValue <- optional $ base64word60 $ 10 - fromMaybe 0 rawReuseValue
-    skipSpace
     rawUuidVersion <- optional pUuidVersion
     rawReuseOrigin <- optional pReuse
     rawOrigin <- optional $ base64word60 $ 10 - fromMaybe 0 rawReuseOrigin
@@ -251,6 +247,7 @@ uuidZip prevOpSameKey sameOpPrevUuid defaultZipBase = label "UUID-zip" $ do
       where
         prefix  = safeCast prev .&. complement 0 `shiftL` (60 - 6 * prefixLen)
         postfix = safeCast new `shiftR` (6 * prefixLen)
+
 
 pReuse :: Parser Int
 pReuse = anyChar >>= \case
