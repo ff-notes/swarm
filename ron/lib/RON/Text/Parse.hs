@@ -28,7 +28,8 @@ import           Attoparsec.Extra (Parser, char, endOfInputEx, isSuccessful,
 import qualified Data.Aeson as Json
 import           Data.Attoparsec.ByteString (takeWhile1)
 import           Data.Attoparsec.ByteString.Char8 (anyChar, decimal, double,
-                                                   signed, skipSpace, takeWhile)
+                                                   peekChar, signed, skipSpace,
+                                                   takeWhile)
 import           Data.Bits (complement, shiftL, shiftR, (.&.), (.|.))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BSC
@@ -293,12 +294,12 @@ pVariety = label "variety" $ do
 
 pUuidVersion :: Parser Word2
 pUuidVersion = label "UUID-version" $
-    anyChar >>= \case
-        '$' -> pure b00
-        '%' -> pure b01
-        '+' -> pure b10
-        '-' -> pure b11
-        _   -> fail "not a UUID-version"
+    peekChar >>= \case
+        Just '$' -> anyChar >> pure b00
+        Just '%' -> anyChar >> pure b01
+        Just '+' -> anyChar >> pure b10
+        Just '-' -> anyChar >> pure b11
+        _        -> fail "not a UUID-version"
 
 payloadP :: UUID -> Parser [Atom]
 payloadP = label "payload" . go
