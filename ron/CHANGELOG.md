@@ -7,7 +7,8 @@ and this project adheres to
 
 ## [Unreleased]
 ### Removed
-- `ObjectPart` as not used in RON-RDT 2.1--3.0.
+- `ObjectPart` as not used in RON-RDT 2.1.
+- Support of space inside text UUID, as removed in RON 2.1.
 
 ## [0.6] - 2019-03-01
 ### Added
