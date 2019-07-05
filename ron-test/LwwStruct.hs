@@ -161,6 +161,7 @@ prop_lwwStruct = property $ do
     example4expect === example4
 
     -- serialize object after modification
+    parseObject oid ex4expect === Right ex4state
     prep ex4expect === prep (snd $ serializeObject ex4state)
 
   where
