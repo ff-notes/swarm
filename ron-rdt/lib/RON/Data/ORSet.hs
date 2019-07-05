@@ -112,8 +112,8 @@ addValue item self = do
     let chunk' = stateBody ++ [newOp]
     let state' = StateChunk
             {stateType = setType, stateVersion = event, stateBody = chunk'}
-    let Object setUuid = self
-    modify' $ Map.insert setUuid state'
+    let Object id = self
+    modify' $ Map.insert id state'
 
 addRef
     :: (ReplicaClock m, MonadE m, MonadState StateFrame m)
@@ -126,14 +126,14 @@ addRef (Object itemUuid) self = do
     let chunk' = stateBody ++ [newOp]
     let state' = StateChunk
             {stateType = setType, stateVersion = event, stateBody = chunk'}
-    let Object setUuid = self
-    modify' $ Map.insert setUuid state'
+    let Object id = self
+    modify' $ Map.insert id state'
 
 -- | XXX Internal. Common implementation of 'removeValue' and 'removeRef'.
 commonRemove
     :: (MonadE m, ReplicaClock m, MonadState StateFrame m)
     => ([Atom] -> Bool) -> Object (ORSet a) -> m ()
-commonRemove isTarget self@(Object selfUuid) = do
+commonRemove isTarget self@(Object id) = do
     StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
     advanceToUuid stateVersion
     let state0@(ORSetRaw opMap) = stateFromChunk stateBody
@@ -153,7 +153,7 @@ commonRemove isTarget self@(Object selfUuid) = do
                     ]
             let chunk' = state0 <> stateFromChunk patch
             let state' = stateToChunk chunk'
-            modify' $ Map.insert selfUuid state'
+            modify' $ Map.insert id state'
 
 -- | Remove an atomic value from the OR-Set
 removeValue
