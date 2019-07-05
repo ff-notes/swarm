@@ -46,7 +46,6 @@ import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid,
                             getEventUuids)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),
                             StateFrame, UUID)
-import           RON.Util (runStateAsWriter)
 import           RON.Util.Word (pattern B11, ls60)
 import           RON.UUID (pattern Zero, uuidVersion)
 import qualified RON.UUID as UUID
@@ -454,7 +453,7 @@ insert items mPosition self@(Object selfUuid) = do
     advanceToUuid stateVersion
 
     vertexIds <- getEventUuids $ ls60 $ genericLength items
-    ops <- runStateAsWriter $
+    ops <-
         for (zip items vertexIds) $ \(item, vertexId) -> do
             payload <- newRon item
             pure $ Op vertexId Zero payload

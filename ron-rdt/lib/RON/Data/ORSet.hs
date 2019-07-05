@@ -28,7 +28,6 @@ import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
                             StateChunk (StateChunk, stateBody, stateType, stateVersion),
                             StateFrame, UUID)
-import           RON.Util (runStateAsWriter)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -108,7 +107,7 @@ addValue item self = do
     StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
     advanceToUuid stateVersion
     event <- getEventUuid
-    payload <- runStateAsWriter $ newRon item
+    payload <- newRon item
     let newOp = Op event Zero payload
     let chunk' = stateBody ++ [newOp]
     let state' = StateChunk

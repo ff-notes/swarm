@@ -30,7 +30,7 @@ import           RON.Error (MonadE, errorContext)
 import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
-import           RON.Util (Instance (Instance), runStateAsWriter)
+import           RON.Util (Instance (Instance))
 import qualified RON.UUID as UUID
 
 -- | Last-Write-Wins: select an op with latter event
@@ -111,7 +111,7 @@ assignField field value self@(Object selfUuid) = do
     advanceToUuid stateVersion
     let chunk = filter (\Op{refId} -> refId /= field) stateBody
     event <- getEventUuid
-    p <- runStateAsWriter $ newRon value
+    p <- newRon value
     let newOp = Op event field p
     let chunk' = sortOn refId $ newOp : chunk
     let state' = StateChunk
