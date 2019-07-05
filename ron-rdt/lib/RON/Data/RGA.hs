@@ -341,10 +341,10 @@ instance Replicated a => ReplicatedAsObject (RGA a) where
             StateChunk{stateType = rgaType, stateVersion, stateBody = ops}
         pure $ Object oid
 
-    getObject obj@Object{frame} = do
+    getObject obj = do
         StateChunk{stateBody} <- getObjectStateChunk obj
         mItems <- for stateBody $ \Op{refId, payload} -> case refId of
-            Zero -> Just <$> fromRon payload frame
+            Zero -> Just <$> fromRon payload
             _    -> pure Nothing
         pure . RGA $ catMaybes mItems
 

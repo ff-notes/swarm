@@ -96,15 +96,6 @@ instance Replicated a => ReplicatedAsObject (ORSet a) where
             _    -> pure Nothing
         pure . ORSet $ catMaybes mItems
 
--- | XXX Internal. Common part of all modifying operations.
-prepareModify
-    :: (MonadE m, MonadState (Object a) m, ReplicaClock m) => m (Object a, [Op])
-prepareModify = do
-    obj <- get
-    StateChunk{stateVersion, stateBody} <- getObjectStateChunk obj
-    advanceToUuid stateVersion
-    pure (obj, stateBody)
-
 -- | XXX Internal. Common implementation of 'addValue' and 'addRef'.
 -- commonAdd ::
 -- commonAdd =
