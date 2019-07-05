@@ -447,7 +447,7 @@ insert
     -> Maybe UUID  -- ^ position
     -> Object (RGA a)
     -> m ()
-insert []    _         _    = pure ()
+insert []    _         _                      = pure ()
 insert items mPosition self@(Object selfUuid) = do
     stateChunk@StateChunk{stateVersion, stateBody} <- getObjectStateChunk self
     advanceToUuid stateVersion
