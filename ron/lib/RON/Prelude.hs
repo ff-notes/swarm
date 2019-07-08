@@ -71,6 +71,7 @@ import           Data.Monoid as X (Last (Last), Monoid, mempty)
 import           Data.Ord as X (Down (Down), Ord, Ordering (EQ, GT, LT),
                                 compare, comparing, max, min, (<), (<=), (>),
                                 (>=))
+import           Data.Proxy as X (Proxy (Proxy))
 import           Data.Ratio as X ((%))
 import           Data.Semigroup as X (Semigroup, sconcat, (<>))
 import           Data.String as X (String)

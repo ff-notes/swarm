@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -ddump-deriv #-}
-
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -7,6 +5,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | RON model types
 module RON.Types (
@@ -35,6 +35,8 @@ module RON.Types (
 
 import           RON.Prelude
 
+import           Data.Typeable (typeRep)
+import           Text.Show (showParen, showString, showsPrec)
 import qualified Text.Show
 
 import           RON.Util.Word (pattern B00, pattern B10, pattern B11, Word2)
@@ -114,7 +116,15 @@ type StateFrame = Map UUID StateChunk
 
 -- | Reference to an object
 newtype Object a = Object UUID
-    deriving (Eq, Show)
+    deriving (Eq)
+
+instance Typeable a => Show (Object a) where
+    showsPrec a (Object b) =
+        showParen (a >= 11)
+            $ showString "Object @"
+            . showsPrec 11 (typeRep $ Proxy @a)
+            . showString " "
+            . showsPrec 11 b
 
 -- | Object accompanied with a frame
 data ObjectState a = ObjectState{uuid :: UUID, frame :: StateFrame}
