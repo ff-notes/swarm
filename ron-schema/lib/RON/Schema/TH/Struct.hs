@@ -81,13 +81,9 @@ mkInstanceReplicatedAsObject
 mkInstanceReplicatedAsObject name fields annotations = do
     ops <- TH.newName "ops"
     let fieldsToUnpack =
-            [ bindS fieldVarP
+            [ bindS (varP field'Var)
                 [| LWW.viewField $(liftData field'RonName) $(varE ops) |]
             | Field'{field'Var, field'RonName} <- fields
-            , let
-                fieldVarP = varP field'Var
-                -- var = maybe fieldP (\w -> conP w [fieldP]) $
-                --     fieldWrapperC field'Type
             ]
     let getObjectImpl = doE
             $   bindS (varP ops) [| getObjectStateChunk |]
@@ -103,13 +99,8 @@ mkInstanceReplicatedAsObject name fields annotations = do
     name' = mkNameT name
     structType = conT name'
     fieldsToPack = listE
-        [ [| ($(liftData field'RonName), Instance $fieldVarE) |]
+        [ [| ($(liftData field'RonName), Instance $(varE field'Var)) |]
         | Field'{field'Var, field'RonName} <- fields
-        , let
-            fieldVarE = varE field'Var
-            -- var = case fieldWrapperC field'Type of
-            --     Nothing  -> fieldVarE
-            --     Just con -> [| $(conE con) $fieldVarE |]
         ]
     errCtx = "getObject @" <> name <> ":\n"
     consE = recConE name'
@@ -165,24 +156,3 @@ mkAccessors structType annotations field' = do
     assign = mkNameT $ mkHaskellFieldName annotations field'Name <> "_assign"
     read   = mkNameT $ mkHaskellFieldName annotations field'Name <> "_read"
     zoom   = mkNameT $ mkHaskellFieldName annotations field'Name <> "_zoom"
-    -- guidedX = case fieldWrapperC field'Type of
-    --     Just w  -> conP w [x]
-    --     Nothing -> x
-    --     where
-    --     x = varP $ TH.mkName "x"
-    -- unguide = [| \ $guidedX -> x |]
-    -- guide = case fieldWrapperC field'Type of
-    --     Just w  -> conE w
-    --     Nothing -> [| id |]
-
--- | Type-directing newtype
--- fieldWrapperC :: RonType -> Maybe TH.Name
--- fieldWrapperC typ = case typ of
---     TAtom                   _ -> Nothing
---     TComposite              _ -> Nothing
---     TObject                 t -> case t of
---         TORSet              _ -> Just 'ORSet
---         TRga                _ -> Just 'RGA
---         TStructLww          _ -> Nothing
---         TVersionVector        -> Nothing
---     TOpaque                 _ -> Nothing
