@@ -330,7 +330,7 @@ rgaType = $(UUID.liftName "rga")
 
 -- | Typed RGA
 newtype RGA a = RGA [a]
-    deriving (Eq)
+    deriving (Eq, Show)
 
 instance Replicated a => Replicated (RGA a) where encoding = objectEncoding
 

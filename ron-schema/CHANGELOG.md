@@ -20,6 +20,9 @@ and this project adheres to
   `MonadObjectState` context.
   Object is now passed as an explicit argument.
 
+### Removed
+- Concept of view type. Maybe will return later.
+
 ## [0.6] - 2019-04-25
 ### Added
 - Schema language: `RGA` type.

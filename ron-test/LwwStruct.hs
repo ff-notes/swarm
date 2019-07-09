@@ -11,7 +11,9 @@ import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 
 import           RON.Data (evalObjectState, execObjectState, getObject,
                            newObjectState)
+import           RON.Data.ORSet (ORSet (ORSet))
 import qualified RON.Data.ORSet as ORSet
+import           RON.Data.RGA (RGA (RGA))
 import qualified RON.Data.RGA as RGA
 import           RON.Event (ReplicaId, applicationSpecific)
 import           RON.Event.Simulation (runNetworkSim, runNetworkSimT,
@@ -27,9 +29,9 @@ import           Orphans ()
 example0 :: Struct51
 example0 = Struct51
     { int1 = 275
-    , str2 = "275"
+    , str2 = RGA "275"
     , str3 = "190"
-    , set4 = mempty
+    , set4 = ORSet []
     , opt5 = Nothing
     , opt6 = Just 74
     }
@@ -97,13 +99,13 @@ ex4expect = [i|
 example4expect :: Struct51
 example4expect = Struct51
     { int1 = 166
-    , str2 = "145"
+    , str2 = RGA "145"
     , str3 = "206"
-    , set4 = [Struct51
+    , set4 = ORSet [Struct51
         { int1 = 135
-        , str2 = "136"
+        , str2 = RGA "136"
         , str3 = "137"
-        , set4 = []
+        , set4 = ORSet []
         , opt5 = Nothing
         , opt6 = Nothing
         }]
@@ -142,9 +144,9 @@ prop_lwwStruct = property $ do
                 ORSet.addValue
                     Struct51
                         { int1 = 135
-                        , str2 = "136"
+                        , str2 = RGA "136"
                         , str3 = "137"
-                        , set4 = []
+                        , set4 = ORSet []
                         , opt5 = Nothing
                         , opt6 = Nothing
                         }

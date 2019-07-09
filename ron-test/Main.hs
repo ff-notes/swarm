@@ -446,7 +446,7 @@ prop_ObjectORSet = let
 
 prop_ObjectORSet_recursive = let
     prep = map BSLC.words . BSLC.lines . snd . RT.serializeObject
-    state0 = TestRecursiveORSet{testRecSet = []}
+    state0 = TestRecursiveORSet{testRecSet = ORSet []}
     state1expect =
         [ ["*lww", "#B/00004bfsbH+000000006P", "@`", "!"]
             , [":testRecSet", ">(0omil7"]

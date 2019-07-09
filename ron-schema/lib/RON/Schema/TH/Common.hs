@@ -8,7 +8,6 @@ module RON.Schema.TH.Common (
     liftText,
     mkGuideType,
     mkNameT,
-    mkViewType,
     valD,
     valDP,
 ) where
@@ -28,43 +27,32 @@ import           RON.Schema as X
 mkNameT :: Text -> TH.Name
 mkNameT = TH.mkName . Text.unpack
 
-mkViewType :: HasCallStack => RonType -> TH.TypeQ
-mkViewType = \case
-    TAtom atom -> case atom of
-        TAInteger -> [t| Int64 |]
-        TAString  -> [t| Text |]
-    TComposite t -> case t of
-        TEnum   Enum{name} -> conT $ mkNameT name
-        TOption u          -> [t| Maybe $(mkViewType u) |]
-    TObject t -> case t of
-        TORSet     item            -> wrapList item
-        TRga       item            -> wrapList item
-        TStructLww StructLww{name} -> conT $ mkNameT name
-        TVersionVector             -> [t| VersionVector |]
-    TOpaque Opaque{name, annotations} -> let
-        OpaqueAnnotations{haskellType} = annotations
-        in conT $ mkNameT $ fromMaybe name haskellType
-  where
-    wrapList a = [t| [$(mkViewType a)] |]
-
 valD :: TH.PatQ -> TH.ExpQ -> TH.DecQ
 valD pat body = TH.valD pat (normalB body) []
 
 valDP :: TH.Name -> TH.ExpQ -> TH.DecQ
 valDP = valD . varP
 
+-- | Guide type is the type which has an instance of 'Replicated'.
+-- Different guide types may have same user type, or, from the other side,
+-- a user type may be replicated different ways, with different guide types.
 mkGuideType :: RonType -> TH.TypeQ
 mkGuideType typ = case typ of
-    TAtom                   _ -> view
-    TComposite              _ -> view
-    TObject                 t -> case t of
-        TORSet              a -> wrap ''ORSet a
-        TRga                a -> wrap ''RGA   a
-        TStructLww          _ -> view
-        TVersionVector        -> view
-    TOpaque                 _ -> view
+    TAtom atom -> case atom of
+        TAInteger -> [t| Int64 |]
+        TAString  -> [t| Text |]
+    TComposite t -> case t of
+        TEnum   Enum{name} -> conT $ mkNameT name
+        TOption u          -> [t| Maybe $(mkGuideType u) |]
+    TObject t -> case t of
+        TORSet     a               -> wrap ''ORSet a
+        TRga       a               -> wrap ''RGA   a
+        TStructLww StructLww{name} -> conT $ mkNameT name
+        TVersionVector             -> [t| VersionVector |]
+    TOpaque Opaque{name, annotations} -> let
+        OpaqueAnnotations{haskellType} = annotations
+        in conT $ mkNameT $ fromMaybe name haskellType
   where
-    view = mkViewType typ
     wrap w item = [t| $(conT w) $(mkGuideType item) |]
 
 liftText :: Text -> TH.ExpQ

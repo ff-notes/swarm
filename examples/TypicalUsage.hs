@@ -4,6 +4,7 @@
 module Main where
 
 import RON.Data
+import RON.Data.RGA
 import RON.Schema.TH
 import RON.Storage.FS as Storage
 
@@ -22,5 +23,5 @@ main = do
     h <- Storage.newHandle dataDir
     runStorage h $ do
         obj <- newObjectState
-            Note{active = True, text = "Write a task manager"}
+            Note{active = True, text = RGA "Write a task manager"}
         createDocument obj
