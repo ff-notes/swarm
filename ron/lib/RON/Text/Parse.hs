@@ -23,8 +23,8 @@ module RON.Text.Parse
 import           RON.Prelude hiding (takeWhile)
 
 import           Attoparsec.Extra (Parser, char, endOfInputEx, isSuccessful,
-                                   label, manyTill, parseOnlyL, satisfy, (<+>),
-                                   (??))
+                                   label, manyTill, parseOnlyL, satisfy,
+                                   definiteDouble, (<+>), (??))
 import qualified Data.Aeson as Json
 import           Data.Attoparsec.ByteString (takeWhile1)
 import           Data.Attoparsec.ByteString.Char8 (anyChar, decimal, double,
@@ -193,6 +193,23 @@ uuid11 = label "UUID-RON-11-letter-value" $ do
 
 data UuidZipBase = PrevOpSameKey | SameOpPrevUuid
 
+uuidZip' :: Parser UUID
+uuidZip' = label "UUID-zip'" $ do
+    rawVariety <- optional pVariety
+    rawValue <- base64word60 10
+    rawUuidVersion <- optional pUuidVersion
+    rawOrigin <- case rawUuidVersion of
+                   Just _ -> optional $ base64word60 10
+                   Nothing -> pure Nothing
+
+    pure $ UUID.build UuidFields
+        { uuidVariety = fromMaybe b0000    rawVariety
+        , uuidValue   = rawValue
+        , uuidVariant = b00
+        , uuidVersion = fromMaybe b00      rawUuidVersion
+        , uuidOrigin  = fromMaybe (ls60 0) rawOrigin
+        }
+
 {-# DEPRECATED uuidZip "Deprecated since RON 2.1 ." #-}
 uuidZip :: UUID -> UUID -> UuidZipBase -> Parser UUID
 uuidZip prevOpSameKey sameOpPrevUuid defaultZipBase = label "UUID-zip" $ do
@@ -317,9 +334,19 @@ atom prevUuid = skipSpace *> atom'
         char '^' *> skipSpace *> (AFloat   <$> double ) <+>
         char '=' *> skipSpace *> (AInteger <$> integer) <+>
         char '>' *> skipSpace *> (AUuid    <$> uuid'  ) <+>
-        AString                            <$> string
+        (AString                           <$> string ) <+>
+        atomUnprefixed prevUuid
     integer = signed decimal
     uuid'   = uuidAtom prevUuid
+
+atomUnprefixed :: UUID -> Parser Atom
+atomUnprefixed prevUuid =
+    (AFloat   <$> definiteDouble) <+>
+    (AInteger <$> integer          ) <+>
+    (AUuid    <$> uuidUnzipped     )
+  where
+    integer = signed decimal
+    uuidUnzipped = uuid22 <+> uuid11 <+> uuidZip'
 
 uuidAtom :: UUID -> Parser UUID
 uuidAtom prev = uuid UUID.zero prev SameOpPrevUuid

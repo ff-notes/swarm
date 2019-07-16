@@ -388,7 +388,7 @@ prop_ORSet = let
     state0expect = [["*set", "#B/00000omion+000000005j", "@`", "!"], ["."]]
     state1expect =
         [ ["*set", "#B/00000omion+000000005j", "@`(2xPmJ2", "!"]
-        , ["@", "=370"]
+        , ["@", "370"]
         , ["."]
         ]
     state2expect =
