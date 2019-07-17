@@ -23,6 +23,7 @@ import           Data.Attoparsec.Lazy as Attoparsec
 import qualified Data.ByteString as BS
 import           Data.ByteString.Lazy (fromStrict, toStrict)
 import qualified Data.Scientific as Sci
+import           GHC.Real (toInteger)
 
 import           RON.Util (ByteStringL)
 
@@ -89,45 +90,37 @@ char c = do
     else
         fail $ "Expected " ++ show c ++ ", got " ++ show c'
 
--- Note: Derived from 'scientifically' from Data.Attoparsec.ByteString.Char8.
--- A strict pair
-data SP = SP !Integer {-# UNPACK #-}!Int
-
 -- | Parses a definite double, i.e. it is not an integer. For this, the double has either a '.', and 'e'/'E' part or both.
 {-# INLINE definiteDouble #-}
 definiteDouble :: Parser Double
 definiteDouble = do
-    let minus = 45 -- ord '-'
-        plus  = 43 -- ord '+'
-    sign <- peekWord8'
-    let !positive = sign /= minus
-    when (sign == plus || sign == minus) $
-        void anyWord8
+    let parseIntegerPart = signed decimal
+    let parseDot = char '.'
+    let parseFractionalPartWithLength =
+            BS.foldl' step (0, 0) `fmap` Attoparsec.takeWhile1 isDigit_w8
+                where step (a, l) w = (a * 10 + fromIntegral (w - 48), l + 1)
+    let parseExponent = (char 'e' <|> char 'E') *> signed decimal
 
-    n <- decimal
+    let withDot = do
+          i <- optional parseIntegerPart
+          parseDot
+          (f, l) <- parseFractionalPartWithLength
+          e <- optional parseExponent
+          pure $ buildDouble (fromMaybe 0 i) f l (fromMaybe 0 e)
 
-    let f fracDigits = SP (BS.foldl' step n fracDigits)
-                          (negate $ BS.length fracDigits)
-        step a w = a * 10 + fromIntegral (w - 48)
+    let withE = do
+          i <- optional parseIntegerPart
+          e <- parseExponent
+          pure $ buildDouble (fromMaybe 0 i) 0 0 e
 
-    dotty <- peekWord8
-    -- '.' -> ascii 46
-    let hasDot = case dotty of
-                     Just 46 -> True
-                     _       -> False
-    SP c e <- if hasDot
-                 then anyWord8 *> (f <$> Attoparsec.takeWhile isDigit_w8)
-                 else pure (SP n 0)
+    withDot <|> withE
 
-    let !signedCoeff | positive  =  c
-                     | otherwise = -c
-
-    let littleE = 101
-        bigE    = 69
-    (satisfy (\ex -> ex == littleE || ex == bigE) *>
-        fmap (Sci.toRealFloat . Sci.scientific signedCoeff . (e +)) (signed decimal)) <|>
-        (if hasDot then pure (Sci.toRealFloat $ Sci.scientific signedCoeff    e)
-                   else fail "Parsing double is ambiguous")
+buildDouble :: Integer -> Integer -> Int -> Int -> Double
+buildDouble integerPart fractionalPart fractionalPartLength exponentPart =
+    let addOrSubFractionalPart = if integerPart < 0 then -fractionalPart else fractionalPart
+        coeff = integerPart * (10 ^ (toInteger fractionalPartLength)) + (toInteger addOrSubFractionalPart)
+        exponent = exponentPart - fractionalPartLength
+     in Sci.toRealFloat $ Sci.scientific coeff exponent
 
 (<+>) :: Parser a -> Parser a -> Parser a
 (<+>) p1 p2 = Internal.Parser $ \t pos more lose suc -> let
