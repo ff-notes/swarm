@@ -32,6 +32,7 @@ test-suite common
         bytestring,
         containers,
         directory,
+        directory-tree,
         extra,
         filepath,
         hedgehog,
