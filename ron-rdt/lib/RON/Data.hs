@@ -109,20 +109,12 @@ mkWireReducer obj chunks = chunks' <> leftovers where
             nState = sconcat $ fmap snd nStates
             (reducedState, unapplied') =
                 applyPatches nState (patches, closedOps)
-            StateChunk
-                    { stateVersion = reducedStateVersion
-                    , stateBody = reducedStateBody
-                    } =
+            StateChunk {stateBody = reducedStateBody} =
                 stateToChunk @a reducedState
             MaxOnFst (seenStateVersion, seenState) =
                 sconcat $ fmap MaxOnFst nStates
-            stateVersion = if
-                | reducedStateVersion > seenStateVersion -> reducedStateVersion
-                | reducedState == seenState -> seenStateVersion
-                | otherwise -> UUID.succValue seenStateVersion
             rc = ReducedChunk
-                { rcVersion = stateVersion
-                , rcRef = Zero
+                { rcRef = Zero
                 , rcBody = reducedStateBody
                 }
             in

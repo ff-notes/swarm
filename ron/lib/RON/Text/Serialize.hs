@@ -181,14 +181,12 @@ serializeStateFrame =
     serializeWireFrame . map wrapChunk . sortOn (stateType . snd) . Map.assocs
     -- TODO(2019-01-28, cblp) remove sortOn type
   where
-    wrapChunk (objectId, StateChunk{..}) = Value WireReducedChunk{..}
-      where
-        wrcHeader = ClosedOp
-            { reducerId = stateType
-            , objectId
-            , op = Op{opId = stateVersion, refId = zero, payload = []}
-            }
-        wrcBody = stateBody
+    wrapChunk (objectId, StateChunk{stateType, stateBody}) =
+        Value
+            WireReducedChunk
+                { wrcHeader = opZero{reducerId = stateType, objectId}
+                , wrcBody = stateBody
+                }
 
 -- | Serialize an object. Return object id that must be stored separately.
 serializeObject :: ObjectState a -> (UUID, ByteStringL)
