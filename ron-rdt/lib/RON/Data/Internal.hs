@@ -47,10 +47,9 @@ import           RON.Error (MonadE, errorContext, liftMaybe)
 import           RON.Event (ReplicaClock, advanceToUuid)
 import           RON.Types (Atom (AInteger, AString, AUuid), Object (Object),
                             ObjectState (ObjectState, frame, uuid),
-                            Op (Op, opId),
+                            Op (Op, opId, payload, refId),
                             StateChunk (StateChunk, stateBody, stateType),
                             StateFrame, UUID (UUID), WireChunk)
-import           RON.UUID (zero)
 
 -- | Reduce all chunks of specific type and object in the frame
 type WireReducer = UUID -> NonEmpty WireChunk -> [WireChunk]
@@ -101,9 +100,6 @@ data ReducedChunk = ReducedChunk
     , rcBody    :: [Op]
     }
     deriving (Show)
-
-mkChunkVersion :: [Op] -> UUID
-mkChunkVersion = maximumDef zero . map opId
 
 mkStateChunk :: UUID -> [Op] -> StateChunk
 mkStateChunk stateType ops = StateChunk{stateType, stateBody = ops}
@@ -251,11 +247,21 @@ modifyObjectStateChunk
     => (StateChunk -> m (b, StateChunk)) -> m b
 modifyObjectStateChunk f = do
     Object uuid <- ask
-    chunk <- getObjectStateChunk
-    advanceToUuid _
+    chunk@StateChunk{stateBody} <- getObjectStateChunk
+    advanceToUuid $
+        maximumDef
+            uuid
+            [ max opId $ maximumDef refId $ mapMaybe atomAsUuid payload
+            | Op{opId, refId, payload} <- stateBody
+            ]
     (a, chunk') <- f chunk
     modify' $ Map.insert uuid chunk'
     pure a
+
+atomAsUuid :: Atom -> Maybe UUID
+atomAsUuid = \case
+    AUuid u -> Just u
+    _       -> Nothing
 
 modifyObjectStateChunk_
     :: (MonadObjectState a m, ReplicaClock m, MonadE m)

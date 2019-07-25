@@ -48,9 +48,8 @@ import           RON.Data.Internal (MonadObjectState,
                                     getObjectStateChunk,
                                     modifyObjectStateChunk_, newObject, newRon,
                                     objectEncoding, objectOpType, rcBody, rcRef,
-                                    rcVersion, reduceUnappliedPatches,
-                                    reducibleOpType, stateFromChunk,
-                                    stateToChunk, toPayload)
+                                    reduceUnappliedPatches, reducibleOpType,
+                                    stateFromChunk, stateToChunk, toPayload)
 import           RON.Error (MonadE, errorContext, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid, getEventUuids)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),

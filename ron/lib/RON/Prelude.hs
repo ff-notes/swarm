@@ -66,7 +66,7 @@ import           Data.List as X (drop, filter, genericLength, intercalate,
 import           Data.List.NonEmpty as X (NonEmpty ((:|)), nonEmpty)
 import           Data.Map.Strict as X (Map)
 import           Data.Maybe as X (Maybe (Just, Nothing), catMaybes, fromMaybe,
-                                  listToMaybe, maybe, maybeToList)
+                                  listToMaybe, mapMaybe, maybe, maybeToList)
 import           Data.Monoid as X (Last (Last), Monoid, mempty)
 import           Data.Ord as X (Down (Down), Ord, Ordering (EQ, GT, LT),
                                 compare, comparing, max, min, (<), (<=), (>),

@@ -68,7 +68,6 @@ newObject fields = do
         (<>) $ Map.singleton event $
         StateChunk
             { stateType = lwwType
-            , stateVersion = event
             , stateBody =
                 [Op event name p | ((name, _), p) <- zip fields payloads]
             }
@@ -105,15 +104,14 @@ assignField
     -> field  -- ^ Value
     -> m ()
 assignField field value = do
-    StateChunk{stateBody, stateVersion} <- getObjectStateChunk
+    StateChunk{stateBody} <- getObjectStateChunk
     advanceToUuid stateVersion
     let chunk = filter (\Op{refId} -> refId /= field) stateBody
     event <- getEventUuid
     p <- newRon value
     let newOp = Op event field p
     let chunk' = sortOn refId $ newOp : chunk
-    let state' = StateChunk
-            {stateVersion = event, stateBody = chunk', stateType = lwwType}
+    let state' = StateChunk{stateBody = chunk', stateType = lwwType}
     Object uuid <- ask
     modify' $ Map.insert uuid state'
 

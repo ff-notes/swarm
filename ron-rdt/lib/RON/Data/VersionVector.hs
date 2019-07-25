@@ -67,7 +67,7 @@ instance ReplicatedAsObject VersionVector where
         let stateVersion = maximumDef oid $ map opId ops
         modify' $
             (<>) $ Map.singleton oid $
-            StateChunk{stateType = vvType, stateVersion, stateBody = ops}
+            StateChunk{stateType = vvType, stateBody = ops}
         pure $ Object oid
 
     getObject = do

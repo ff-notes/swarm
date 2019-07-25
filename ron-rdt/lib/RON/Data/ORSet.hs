@@ -38,7 +38,7 @@ import           RON.Error (MonadE, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
-                            StateChunk (StateChunk, stateBody, stateType, stateVersion),
+                            StateChunk (StateChunk, stateBody, stateType),
                             UUID)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
