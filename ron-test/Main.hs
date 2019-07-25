@@ -288,17 +288,17 @@ prop_RGA_edit_idempotency_back = property $ do
 prop_RGA_delete_deleted = let
     prep = map BSLC.words . BSLC.lines . snd . RT.serializeObject
     rga0expect =
-        [ ["*rga", "#B/000015NGPU+000000003f", "@`(0kmiUz", "!"]
-        , ["@)v", "'h'"]
-        , ["@)w", "'e'"]
-        , ["@)x", "'l'"]
-        , ["@)y", "'l'"]
-        , ["@)z", "'o'"]
+        [ ["*rga", "#B/000015NGPU+000000003f", "!"]
+        , ["@`(0kmiUv", "'h'"]
+        , ["@)w",       "'e'"]
+        , ["@)x",       "'l'"]
+        , ["@)y",       "'l'"]
+        , ["@)z",       "'o'"]
         , ["."]
         ]
     rga1expect =
-        [ ["*rga", "#B/000015NGPU+000000003f", "@`(4Q8IxU", "!"]
-        , ["@(0kmiUv",          "'h'"]
+        [ ["*rga", "#B/000015NGPU+000000003f", "!"]
+        , ["@`(0kmiUv",         "'h'"]
         , ["@)w",               "'e'"]
         , ["@)x",               "'l'"]
         , ["@)y",               "'l'"]
@@ -306,8 +306,8 @@ prop_RGA_delete_deleted = let
         , ["."]
         ]
     rga2expect =
-        [ ["*rga", "#B/000015NGPU+000000003f", "@`(AVmKxU", "!"]
-        , ["@(0kmiUv",                  "'h'"]
+        [ ["*rga", "#B/000015NGPU+000000003f", "!"]
+        , ["@`(0kmiUv",                 "'h'"]
         , ["@)w",                       "'e'"]
         , ["@)x",                       "'l'"]
         , ["@)y",       ":`(75FOxU",    "'l'"]
@@ -385,15 +385,15 @@ instance Show (ShowAs a) where
 
 prop_ORSet = let
     prep = map BSLC.words . BSLC.lines . snd . RT.serializeObject
-    state0expect = [["*set", "#B/00000omion+000000005j", "@`", "!"], ["."]]
+    state0expect = [["*set", "#B/00000omion+000000005j", "!"], ["."]]
     state1expect =
-        [ ["*set", "#B/00000omion+000000005j", "@`(2xPmJ2", "!"]
-        , ["@", "370"]
+        [ ["*set", "#B/00000omion+000000005j", "!"]
+        , ["@`(2xPmJ2", "370"]
         , ["."]
         ]
     state2expect =
-        [ ["*set", "#B/00000omion+000000005j", "@`(3Jlz_Y", "!"]
-        , [":`(2xPmJ2"]
+        [ ["*set", "#B/00000omion+000000005j", "!"]
+        , ["@`(3Jlz_Y", ":`(2xPmJ2"]
         , ["."]
         ]
     in
@@ -410,23 +410,23 @@ prop_ORSet = let
 
 prop_ObjectORSet = let
     prep = map BSLC.words . BSLC.lines . snd . RT.serializeObject
-    state0expect = [["*set", "#B/00000omilG+000000006G", "@`", "!"], ["."]]
+    state0expect = [["*set", "#B/00000omilG+000000006G", "!"], ["."]]
     state1expect =
-        [ ["*rga", "#B/00005~K_SG+000000006G", "@`(2lqPwO", "!"]
-            , ["@)M", "'4'"]
+        [ ["*rga", "#B/00005~K_SG+000000006G", "!"]
+            , ["@`(2lqPwM", "'4'"]
             , ["@)N", "'0'"]
             , ["@)O", "'3'"]
-        , ["*set", "#(0omilG", "@(6Io4NG", "!"]
-            , ["@", ">(5~K_SG"]
+        , ["*set", "#(0omilG", "@0", "!"]
+            , ["@`(6Io4NG", ">(5~K_SG"]
         , ["."]
         ]
     state2expect =
-        [ ["*rga", "#B/00005~K_SG+000000006G", "@`(2lqPwO", "!"]
-            , ["@)M", "'4'"]
+        [ ["*rga", "#B/00005~K_SG+000000006G", "!"]
+            , ["@`(2lqPwM", "'4'"]
             , ["@)N", "'0'"]
             , ["@)O", "'3'"]
-        , ["*set", "#(0omilG", "@(8QQEHG", "!"]
-            , [":`(6Io4NG"]
+        , ["*set", "#(0omilG", "@0", "!"]
+            , ["@`(8QQEHG", ":`(6Io4NG"]
         , ["."]
         ]
     in
@@ -448,16 +448,16 @@ prop_ObjectORSet_recursive = let
     prep = map BSLC.words . BSLC.lines . snd . RT.serializeObject
     state0 = TestRecursiveORSet{testRecSet = ORSet []}
     state1expect =
-        [ ["*lww", "#B/00004bfsbH+000000006P", "@`", "!"]
-            , [":testRecSet", ">(0omil7"]
-        , ["*set", "#(0omil7", "@`", ":0", "!"]
+        [ ["*lww", "#B/00004bfsbH+000000006P", "!"]
+            , ["@`", ":testRecSet", ">(0omil7"]
+        , ["*set", "#(0omil7", "@0", ":0", "!"]
         , ["."]
         ]
     state2expect =
-        [ ["*lww", "#B/00004bfsbH+000000006P", "@`", "!"]
-            , [":testRecSet", ">(0omil7"]
-        , ["*set", "#(0omil7", "@(6yT_gy", ":0", "!"]
-            , ["@", ">(4bfsbH"]
+        [ ["*lww", "#B/00004bfsbH+000000006P", "!"]
+            , ["@`", ":testRecSet", ">(0omil7"]
+        , ["*set", "#(0omil7", "@0", ":0", "!"]
+            , ["@`(6yT_gy", ">(4bfsbH"]
         , ["."]
         ]
     in

@@ -48,9 +48,8 @@ import           RON.Data.Internal (MonadObjectState,
                                     getObjectStateChunk,
                                     modifyObjectStateChunk_, newObject, newRon,
                                     objectEncoding, objectOpType, rcBody, rcRef,
-                                    rcVersion, reduceUnappliedPatches,
-                                    reducibleOpType, stateFromChunk,
-                                    stateToChunk, toPayload)
+                                    reduceUnappliedPatches, reducibleOpType,
+                                    stateFromChunk, stateToChunk, toPayload)
 import           RON.Error (MonadE, errorContext, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid, getEventUuids)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),
@@ -169,9 +168,7 @@ instance Reducible RgaRaw where
 
     stateFromChunk = RgaRaw . vertexListFromOps
 
-    stateToChunk (RgaRaw rga) = StateChunk
-        {stateType = rgaType, stateVersion = chunkVersion stateBody, stateBody}
-      where
+    stateToChunk (RgaRaw rga) = StateChunk{stateType = rgaType, stateBody} where
         stateBody = maybe [] vertexListToOps rga
 
     applyPatches rga (patches, ops) =
@@ -183,8 +180,8 @@ instance Reducible RgaRaw where
         foldMap patchSetFromChunk patches <> foldMap patchSetFromRawOp ops
 
 patchSetToChunks :: PatchSet -> Unapplied
-patchSetToChunks PatchSet{..} =
-    (   [ ReducedChunk{rcVersion = chunkVersion rcBody, ..}
+patchSetToChunks PatchSet{psPatches, psRemovals} =
+    (   [ ReducedChunk{..}
         | (rcRef, vertices) <- Map.assocs psPatches
         , let rcBody = vertexListToOps vertices
         ]
@@ -192,12 +189,6 @@ patchSetToChunks PatchSet{..} =
         | (refId, tombstone) <- Map.assocs psRemovals
         ]
     )
-
-chunkVersion :: [Op] -> UUID
-chunkVersion ops = maximumDef Zero
-    [ max vertexId tombstone
-    | Op{opId = vertexId, refId = tombstone} <- ops
-    ]
 
 reapplyPatchSet :: PatchSet -> PatchSet
 reapplyPatchSet ps =
@@ -343,10 +334,9 @@ instance Replicated a => ReplicatedAsObject (RGA a) where
             payload <- newRon item
             pure $ Op vertexId Zero payload
         oid <- getEventUuid
-        let stateVersion = maximumDef oid $ map opId ops
         modify' $
             (<>) $ Map.singleton oid $
-            StateChunk{stateType = rgaType, stateVersion, stateBody = ops}
+            StateChunk{stateType = rgaType, stateBody = ops}
         pure $ Object oid
 
     getObject = do
@@ -380,20 +370,16 @@ edit newItems =
                         pure op{refId = tombstone}
                     op ->  -- deleted already
                         pure op
-                Both v _      -> pure v
-                Second added  -> for added $ \op -> do
+                Both v _     -> pure v
+                Second added -> for added $ \op -> do
                     -- TODO(2018-11-03, #15, cblp) get sequential ids
                     opId <- getEventUuid
                     tell . Last $ Just opId
                     pure op{opId}
         case lastEvent of
             Nothing -> pure chunk
-            Just stateVersion' ->
-                pure StateChunk
-                    { stateType    = rgaType
-                    , stateVersion = stateVersion'
-                    , stateBody    = stateBody'
-                    }
+            Just _  ->
+                pure StateChunk{stateType = rgaType, stateBody = stateBody'}
   where
     eqAliveOnPayload
             Op{refId = Zero, payload = p1}
@@ -451,18 +437,16 @@ insert
     -> m ()
 insert []    _         = pure ()
 insert items mPosition =
-    modifyObjectStateChunk_ $ \chunk@StateChunk{stateVersion, stateBody} -> do
+    modifyObjectStateChunk_ $ \chunk@StateChunk{stateBody} -> do
         vertexIds <- getEventUuids $ ls60 $ genericLength items
         ops <-
             for (zip items vertexIds) $ \(item, vertexId) -> do
                 payload <- newRon item
                 pure $ Op vertexId Zero payload
-
-        let stateVersion' = maximumDef stateVersion $ map opId ops
         stateBody' <- case mPosition of
             Nothing -> pure $ ops <> stateBody
             Just position -> findAndInsertAfter position ops stateBody
-        pure chunk{stateVersion = stateVersion', stateBody = stateBody'}
+        pure chunk{stateBody = stateBody'}
   where
     findAndInsertAfter pos newOps = go where
         go = \case
@@ -514,7 +498,7 @@ remove position =
     modifyObjectStateChunk_ $ \chunk@StateChunk{stateBody} -> do
         event <- getEventUuid
         stateBody' <- findAndTombstone event stateBody
-        pure chunk{stateVersion = event, stateBody = stateBody'}
+        pure chunk{stateBody = stateBody'}
   where
     findAndTombstone event = go where
         go = \case

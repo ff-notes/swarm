@@ -54,7 +54,6 @@ import           RON.Types (ClosedOp (..), Object (Object),
                             WireChunk (Closed, Query, Value), WireFrame,
                             WireReducedChunk (..))
 import           RON.UUID (pattern Zero)
-import qualified RON.UUID as UUID
 
 reducers :: Map UUID Reducer
 reducers = Map.fromList
@@ -109,22 +108,9 @@ mkWireReducer obj chunks = chunks' <> leftovers where
             nState = sconcat $ fmap snd nStates
             (reducedState, unapplied') =
                 applyPatches nState (patches, closedOps)
-            StateChunk
-                    { stateVersion = reducedStateVersion
-                    , stateBody = reducedStateBody
-                    } =
+            StateChunk {stateBody = reducedStateBody} =
                 stateToChunk @a reducedState
-            MaxOnFst (seenStateVersion, seenState) =
-                sconcat $ fmap MaxOnFst nStates
-            stateVersion = if
-                | reducedStateVersion > seenStateVersion -> reducedStateVersion
-                | reducedState == seenState -> seenStateVersion
-                | otherwise -> UUID.succValue seenStateVersion
-            rc = ReducedChunk
-                { rcVersion = stateVersion
-                , rcRef = Zero
-                , rcBody = reducedStateBody
-                }
+            rc = ReducedChunk{rcRef = Zero, rcBody = reducedStateBody}
             in
             (Just $ Value $ wrapRChunk rc, reduceUnappliedPatches @a unapplied')
     typ = reducibleOpType @a
@@ -141,9 +127,7 @@ mkWireReducer obj chunks = chunks' <> leftovers where
             case ref of
                 Zero ->  -- state
                     pure
-                        ( [ ( opId $ op wrcHeader
-                            , stateFromChunk wrcBody
-                            ) ]
+                        ( [(opId $ op wrcHeader, stateFromChunk wrcBody)]
                         , []
                         , []
                         , []
@@ -151,20 +135,15 @@ mkWireReducer obj chunks = chunks' <> leftovers where
                 _ ->  -- patch
                     pure
                         ( []
-                        ,   [ ReducedChunk
-                                { rcVersion = opId $ op wrcHeader
-                                , rcRef = ref
-                                , rcBody = wrcBody
-                                }
-                            ]
+                        , [ReducedChunk{rcRef = ref, rcBody = wrcBody}]
                         , []
                         , []
                         )
         _ -> Nothing
     guardSameObject ClosedOp{reducerId, objectId} =
         guard $ reducerId == typ && objectId == obj
-    wrapRChunk ReducedChunk{..} = WireReducedChunk
-        { wrcHeader = wrapOp Op{opId = rcVersion, refId = rcRef, payload = []}
+    wrapRChunk ReducedChunk{rcRef, rcBody} = WireReducedChunk
+        { wrcHeader = wrapOp Op{opId = Zero, refId = rcRef, payload = []}
         , wrcBody   = rcBody
         }
 

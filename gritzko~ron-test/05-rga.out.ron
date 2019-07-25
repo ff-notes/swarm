@@ -1,79 +1,79 @@
 *~ 'empty state + an op' ?
 *~ 'a state' !
-*rga#text_0a@time:0!
-	'A' ,
+*rga#text_0a@0:0!
+	@time 'A' ,
 
 *~ 'a state plus an op'?
 *~ 'a merged state'!
-*rga#text_sa@2:0!
+*rga#text_sa@0:0!
 	@1 'A' ,
 	@2 'B' ,
 
 *~ 'an op plus another op'?
 *~ 'a subtree patch'!
-*rga#text_ab@3:1!
+*rga#text_ab@0:1!
 	@2 :0 'B' ,
 	@3 'C' ,
 
 *~ 'a state plus a patch'?
 *~ 'a merged state'!
-*rga#text_sp@2:0!
+*rga#text_sp@0:0!
 	@1 'A' ,
 	@2 'B' ,
 
 *~ 'a patch plus a patch'?
 *~ 'a merged patch'!
-*rga#text_pp@3:1!
+*rga#text_pp@0:1!
 	@2 :0 'B' ,
 	@3 'C' ,
 
 *~ 'a state plus a later state'?
 *~ 'the later state'!
-*rga#text_st@2:0!
+*rga#text_st@0:0!
 	@1 'A' ,
 	@2 'B' ,
 
 *~ 'two diverged states'?
 *~ 'a merged state'!
-*rga#text_sS@3000000001:0!
+*rga#text_sS@0:0!
 	@1 'A' ,
 	@3 'C' ,
 	@2 'B' ,
 
 *~ 'state + state with a new rm'?
 *~ 'rm applied'!
-*rga#text_sz@4000000001:0!
+*rga#text_sz@0:0!
 	@1 :4 'A' ,
 	@3 :0 'C' ,
 	@2 'B' ,
 
 *~ 'an op and a backspace rm'?
 *~ 'a patch, rm applied'!
-*rga#text_ad@3:1!
+*rga#text_ad@0:1!
 	@2 :3 'B',
 
 *~ 'a patch and a backspace rm'?
 *~ 'a patch with the rm applied'!
-*rga#text_pd@4:1!
+*rga#text_pd@0:1!
 	@2 :4 'B' ,
 	@3 :0 'C' ,
 
 *~ 'a state and an rm-patch'?
 *~ 'a state with all rms applied'!
-*rga#text_sr@4:0!
+*rga#text_sr@0:0!
 	@1 :3 'A' ,
 	@2 :4 'B' ,
 
 *~ 'diverged states with concurrent rms and stuff'?
 *~ 'a merged state'!
-*rga#text_sx@5000000001:0!
+*rga#text_sx@0:0!
 	@1 :4a 'A' ,
 	@3 :0 'C' ,
 	@2 :5 'B' ,
 
 *~ 'two states diverged in a convoluted way'?
 *~ 'merged'!
-*rga#text_sw@5:0!
+*rga#text_sw@0:0!
 	@1 :4a 'A' ,
 	@3 :0 'C' ,
 	@4 'D' ,
@@ -81,7 +81,7 @@
 
 *~ 'even more convoluted divergence'?
 *~ 'merged'!
-*rga#text_SW@7000000001:0!
+*rga#text_SW@0:0!
 	@1 :4a 'A' ,
 	@6 :0 'F' ,
 	@5 'E' ,
@@ -91,43 +91,43 @@
 
 *~ 'a state and an insert op'?
 *~ 'inserted properly'!
-*rga#text_zi@3:0!
+*rga#text_zi@0:0!
 	@1 'A' ,
 	@3 '-' ,
 	@2 'B' ,
 
 *~ 'rm eclipsed by a concurrent rm'?
 *~ 'skipped'!
-*rga#text_dd@4:0!
+*rga#text_dd@0:0!
 	@1 'A' ,
 	@2 :4 'B' ,
 
 *~'reorders: unapplicable remove'?
 *~ 'rm that is stashed in a separate rm frame'!
-*rga#text_s~@2:0!
+*rga#text_s~@0:0!
 	@1 'A' ,
 	@2 'B' ,
 *rga#text_s~@4:3;
 
 *~ 'for a stashed remove, the target arrives'?
 *~ 'target removed'!
-*rga#text_~a@4000000001:0!
+*rga#text_~a@0:0!
 	@1 'A' ,
 	@2 'B' ,
 	@3 :4 'C' ,
 
 *~ 'unapplicable patch'?
 *~ 'the patch goes into a separate frame'!
-*rga#text_s~p@2:0!
+*rga#text_s~p@0:0!
 	@1 'A' ,
 	@2 'B' ,
-*rga#text_s~p@5:3!
+*rga#text_s~p@0:3!
 	@4 :0 'D' ,
 	@5 'E' ,
 
 *~ 'the stashed patch becomes applicable (the missing link arrives)'?
 *~ 'the patch is applied'!
-*rga#text_~b@5:0!
+*rga#text_~b@0:0!
 	@1 'A' ,
 	@2 'B' ,
 	@3 'C' ,
@@ -136,17 +136,17 @@
 
 *~ 'an unappliecable patch with its own rm stash'?
 *~ 'all separate frames'!
-*rga#text_~r@2:0!
+*rga#text_~r@0:0!
 	@1 'A' ,
 	@2 'B' ,
-*rga#text_~r@5:3!
+*rga#text_~r@0:3!
 	@4 :0 'D' ,
 	@5 'E' ,
 *rga#text_~r@6:3;
 
 *~ 'unapplied frames become applicable'?
 *~ 'all applied'!
-*rga#text_~~@6000000001:0!
+*rga#text_~~@0:0!
 	@1 'A' ,
 	@2 'B' ,
 	@3 :6 'C' ,

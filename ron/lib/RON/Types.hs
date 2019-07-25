@@ -105,9 +105,8 @@ data OpTerm = TClosed | TReduced | THeader | TQuery
 
 -- | Reduced chunk representing an object state (i. e. high-level value)
 data StateChunk = StateChunk
-    { stateType    :: UUID
-    , stateVersion :: UUID
-    , stateBody    :: [Op]
+    { stateType :: UUID
+    , stateBody :: [Op]
     }
     deriving (Eq, Show)
 

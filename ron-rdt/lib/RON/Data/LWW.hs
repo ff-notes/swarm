@@ -23,11 +23,12 @@ import           RON.Prelude
 import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
-                                    Replicated, fromRon, getObjectStateChunk,
-                                    mkStateChunk, newRon, reducibleOpType,
-                                    stateFromChunk, stateToChunk)
+                                    Replicated, advanceToObject, fromRon,
+                                    getObjectStateChunk, mkStateChunk, newRon,
+                                    reducibleOpType, stateFromChunk,
+                                    stateToChunk)
 import           RON.Error (MonadE, errorContext)
-import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
+import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util (Instance (Instance))
@@ -68,7 +69,6 @@ newObject fields = do
         (<>) $ Map.singleton event $
         StateChunk
             { stateType = lwwType
-            , stateVersion = event
             , stateBody =
                 [Op event name p | ((name, _), p) <- zip fields payloads]
             }
@@ -105,15 +105,14 @@ assignField
     -> field  -- ^ Value
     -> m ()
 assignField field value = do
-    StateChunk{stateBody, stateVersion} <- getObjectStateChunk
-    advanceToUuid stateVersion
+    StateChunk{stateBody} <- getObjectStateChunk
+    advanceToObject
     let chunk = filter (\Op{refId} -> refId /= field) stateBody
     event <- getEventUuid
     p <- newRon value
     let newOp = Op event field p
     let chunk' = sortOn refId $ newOp : chunk
-    let state' = StateChunk
-            {stateVersion = event, stateBody = chunk', stateType = lwwType}
+    let state' = StateChunk{stateBody = chunk', stateType = lwwType}
     Object uuid <- ask
     modify' $ Map.insert uuid state'
 

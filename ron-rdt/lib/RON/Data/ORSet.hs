@@ -38,7 +38,7 @@ import           RON.Error (MonadE, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
-                            StateChunk (StateChunk, stateBody, stateType, stateVersion),
+                            StateChunk (StateChunk, stateBody, stateType),
                             UUID)
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
@@ -93,10 +93,9 @@ instance Replicated a => ReplicatedAsObject (ORSet a) where
             payload <- newRon item
             pure $ Op event Zero payload
         oid <- getEventUuid
-        let stateVersion = maximumDef oid $ map opId ops
         modify' $
             (<>) $ Map.singleton oid $
-            StateChunk{stateType = setType, stateVersion, stateBody = ops}
+            StateChunk{stateType = setType, stateBody = ops}
         pure $ Object oid
 
     getObject = do
@@ -115,8 +114,7 @@ commonAdd payload =
         event <- getEventUuid
         let newOp = Op event Zero payload
         let chunk' = stateBody ++ [newOp]
-        pure StateChunk
-            {stateType = setType, stateVersion = event, stateBody = chunk'}
+        pure StateChunk{stateType = setType, stateBody = chunk'}
 
 -- | Encode a value and add a it to the OR-Set
 addValue

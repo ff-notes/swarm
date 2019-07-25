@@ -34,12 +34,12 @@ example0 = ORSet [ORSet [ORSet ["octaves"]]]
 
 state1expect :: BSL.ByteString
 state1expect = [i|
-    *set    #B/00009NFGUW+r3pl1c4   @`(6g0dUW   !
-                                    @           'octaves'
-            #(AvZ0UW                @(4bX_UW    !
-                                    @           >(9NFGUW
-            #(EYD0UW                @(1KqirW    !
-                                    @           >(AvZ0UW
+    *set    #B/00009NFGUW+r3pl1c4               !
+                                    @`(6g0dUW   'octaves'
+            #(AvZ0UW                @0          !
+                                    @`(4bX_UW   >(9NFGUW
+            #(EYD0UW                @0          !
+                                    @`(1KqirW   >(AvZ0UW
     .
     |]
 
@@ -48,15 +48,15 @@ example4expect = ORSet [ORSet [ORSet ["candies"]], ORSet []]
 
 state4expect :: BSL.ByteString
 state4expect = [i|
-    *set    #B/00009NFGUW+r3pl1c4   @`(NR50UW               !
-                                    @(KR50UW                'candies'
+    *set    #B/00009NFGUW+r3pl1c4                           !
+                                    @`(KR50UW               'candies'
                                     @(NR50UW    :`(6g0dUW
-            #(AvZ0UW                @(4bX_UW    :0          !
-                                    @                       >(9NFGUW
-            #(EYD0UW                @(JLa0UW                !
-                                    @(1KqirW                >(AvZ0UW
+            #(AvZ0UW                @0          :0          !
+                                    @`(4bX_UW               >(9NFGUW
+            #(EYD0UW                @0                      !
+                                    @`(1KqirW               >(AvZ0UW
                                     @(JLa0UW                >(G2L0UW
-            #(G2L0UW                @`                      !
+            #(G2L0UW                @0                      !
     .
     |]
 

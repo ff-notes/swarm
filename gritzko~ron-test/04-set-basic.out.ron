@@ -1,13 +1,13 @@
-*set#test1@2:1!:0=2@1=1
+*set#test1@0:1!@2:0=2@1=1
 
-*set#test2@2!:1,
+*set#test2@0!@2:1,
 
-*set#test3@4:3!:2,@3:1,
+*set#test3@0:3!@4:2,@3:1,
 
-*set#test4@5:0!@=5@3:2,@4:1,
+*set#test4@0:0!@5=5@3:2,@4:1,
 
-*set#test5@5000000001:0!@5=5@3:2,@4:1,
+*set#test5@0:0!@5=5@3:2,@4:1,
 
-*set#test6@5000000001:0!@5=5@3:2,@4:1,
+*set#test6@0:0!@5=5@3:2,@4:1,
 
-*set#mice@1YKDY54a02+1YKDY5:0!@(Y54a01(Y5>mouse$1YKDY5@(XO3201(XO>mouse$1YKDXO@(WBF901(WBY>mouse$1YKDWBY@[67H01[6>mouse$1YKDW6@(Uh4j01(Uh>mouse$1YKDUh@(S67V01(S6>mouse$1YKDS6@(Of(N3:1YKDN3DS01+1YKDN3,@(MvBV01(IuJ:0>mouse$1YKDIuJ@(LF:1YKDIuEY01+1YKDIuJ,:{A601,@(Io5l01[oA:0>mouse$1YKDIoA@[l7_01[l>mouse$1YKDIl@(57(4B:1YKD4B3f01+1YKD4B,@(0bB401+1YKCsd:0>mouse$1YKCsd@1YKCu6+:1YKCsd7Q01+1YKCsd,
+*set#mice@0:0!@1YKDY54a01+1YKDY5>mouse$1YKDY5@(XO3201(XO>mouse$1YKDXO@(WBF901(WBY>mouse$1YKDWBY@[67H01[6>mouse$1YKDW6@(Uh4j01(Uh>mouse$1YKDUh@(S67V01(S6>mouse$1YKDS6@(Of(N3:1YKDN3DS01+1YKDN3,@(MvBV01(IuJ:0>mouse$1YKDIuJ@(LF:1YKDIuEY01+1YKDIuJ,:{A601,@(Io5l01[oA:0>mouse$1YKDIoA@[l7_01[l>mouse$1YKDIl@(57(4B:1YKD4B3f01+1YKD4B,@(0bB401+1YKCsd:0>mouse$1YKCsd@1YKCu6+:1YKCsd7Q01+1YKCsd,

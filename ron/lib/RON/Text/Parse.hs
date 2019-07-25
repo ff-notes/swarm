@@ -407,13 +407,12 @@ parseObject oid bytes = ObjectState oid <$> parseStateFrame bytes
 findObjects :: WireFrame -> Either String StateFrame
 findObjects = fmap Map.fromList . traverse loadBody where
     loadBody = \case
-        Value WireReducedChunk{..} -> do
-            let ClosedOp{reducerId, objectId, op} = wrcHeader
-            let Op{opId} = op
-            let stateVersion = opId
-            let stateBody = wrcBody
-            let stateType = reducerId
-            pure (objectId, StateChunk{..})
+        Value WireReducedChunk{wrcHeader, wrcBody} -> do
+            let ClosedOp{reducerId, objectId} = wrcHeader
+            pure
+                ( objectId
+                , StateChunk{stateType = reducerId, stateBody = wrcBody}
+                )
         _ -> Left "expected reduced chunk"
 
 opZero :: ClosedOp

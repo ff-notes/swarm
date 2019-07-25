@@ -49,9 +49,8 @@ import           RON.Event (ReplicaClock, advanceToUuid)
 import           RON.Types (Atom (AInteger, AString, AUuid), Object (Object),
                             ObjectState (ObjectState, frame, uuid),
                             Op (Op, opId, payload, refId),
-                            StateChunk (StateChunk, stateBody, stateType, stateVersion),
+                            StateChunk (StateChunk, stateBody, stateType),
                             StateFrame, UUID (UUID), WireChunk)
-import           RON.UUID (zero)
 
 -- | Reduce all chunks of specific type and object in the frame
 type WireReducer = UUID -> NonEmpty WireChunk -> [WireChunk]
@@ -98,18 +97,13 @@ class (Eq a, Monoid a) => Reducible a where
         )
 
 data ReducedChunk = ReducedChunk
-    { rcVersion :: UUID
-    , rcRef     :: UUID
+    { rcRef     :: UUID
     , rcBody    :: [Op]
     }
     deriving (Show)
 
-mkChunkVersion :: [Op] -> UUID
-mkChunkVersion = maximumDef zero . map opId
-
 mkStateChunk :: UUID -> [Op] -> StateChunk
-mkStateChunk stateType ops =
-    StateChunk{stateType, stateVersion = mkChunkVersion ops, stateBody = ops}
+mkStateChunk stateType ops = StateChunk{stateType, stateBody = ops}
 
 data Patch a = Patch{patchRef :: UUID, patchValue :: a}
 
@@ -128,9 +122,9 @@ patchFromChunk ReducedChunk{..} =
 
 patchToChunk :: Reducible a => Patch a -> ReducedChunk
 patchToChunk Patch{patchRef, patchValue} =
-    ReducedChunk{rcRef = patchRef, rcVersion = stateVersion, rcBody = stateBody}
+    ReducedChunk{rcRef = patchRef, rcBody = stateBody}
   where
-    StateChunk{stateVersion, stateBody} = stateToChunk patchValue
+    StateChunk{stateBody} = stateToChunk patchValue
 
 -- | Base class for typed encoding
 class Replicated a where
@@ -253,15 +247,28 @@ modifyObjectStateChunk
     :: (MonadObjectState a m, ReplicaClock m, MonadE m)
     => (StateChunk -> m (b, StateChunk)) -> m b
 modifyObjectStateChunk f = do
+    advanceToObject
     Object uuid <- ask
-    chunk@StateChunk{stateVersion} <- getObjectStateChunk
-    advanceToUuid stateVersion
-    -- event <- getEventUuid
-    -- let state' = StateChunk
-    --         {stateType = _, stateVersion = event, stateBody = chunk'}
+    chunk <- getObjectStateChunk
     (a, chunk') <- f chunk
     modify' $ Map.insert uuid chunk'
     pure a
+
+advanceToObject :: (MonadE m, MonadObjectState a m, ReplicaClock m) => m ()
+advanceToObject = do
+    Object uuid <- ask
+    StateChunk{stateBody} <- getObjectStateChunk
+    advanceToUuid $
+        maximumDef
+            uuid
+            [ max opId $ maximumDef refId $ mapMaybe atomAsUuid payload
+                | Op{opId, refId, payload} <- stateBody
+                ]
+
+atomAsUuid :: Atom -> Maybe UUID
+atomAsUuid = \case
+    AUuid u -> Just u
+    _       -> Nothing
 
 modifyObjectStateChunk_
     :: (MonadObjectState a m, ReplicaClock m, MonadE m)
