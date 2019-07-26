@@ -254,22 +254,6 @@ modifyObjectStateChunk f = do
     modify' $ Map.insert uuid chunk'
     pure a
 
-advanceToObject :: (MonadE m, MonadObjectState a m, ReplicaClock m) => m ()
-advanceToObject = do
-    Object uuid <- ask
-    StateChunk{stateBody} <- getObjectStateChunk
-    advanceToUuid $
-        maximumDef
-            uuid
-            [ max opId $ maximumDef refId $ mapMaybe atomAsUuid payload
-                | Op{opId, refId, payload} <- stateBody
-                ]
-
-atomAsUuid :: Atom -> Maybe UUID
-atomAsUuid = \case
-    AUuid u -> Just u
-    _       -> Nothing
-
 modifyObjectStateChunk_
     :: (MonadObjectState a m, ReplicaClock m, MonadE m)
     => (StateChunk -> m StateChunk) -> m ()
