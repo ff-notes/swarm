@@ -31,7 +31,7 @@ import           RON.Event (CalendarTime (CalendarTime), Event (Event),
 import           RON.Types (Atom (AFloat, AInteger, AString, AUuid),
                             ClosedOp (ClosedOp, objectId, op, reducerId),
                             Op (Op, opId, payload, refId),
-                            StateChunk (StateChunk, stateBody, stateType, stateVersion),
+                            StateChunk (StateChunk, stateBody, stateType),
                             StateFrame, UUID, WireChunk (Closed, Query, Value),
                             WireFrame,
                             WireReducedChunk (WireReducedChunk, wrcBody, wrcHeader))
@@ -92,13 +92,13 @@ stateFrame size =
 
 stateChunk :: MonadGen gen => Int -> gen StateChunk
 stateChunk size = do
-    stateType    <- choice [pure UUID.zero, uuid]
-    stateVersion <- choice [pure UUID.zero, uuid]
-    stateBody    <- choice
-        [ pure [Op UUID.zero UUID.zero []]
-        , list (Range.exponential 0 size) $ reducedOp size
-        ]
-    pure StateChunk{..}
+    stateType <- choice [pure UUID.zero, uuid]
+    stateBody <-
+        choice
+            [ pure [Op UUID.zero UUID.zero []]
+            , list (Range.exponential 0 size) $ reducedOp size
+            ]
+    pure StateChunk{stateType, stateBody}
 
 wireFrames :: MonadGen gen => Int -> gen [WireFrame]
 wireFrames size = list (Range.exponential 0 size) (wireFrame size)

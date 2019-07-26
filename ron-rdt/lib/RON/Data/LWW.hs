@@ -23,11 +23,12 @@ import           RON.Prelude
 import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
-                                    Replicated, fromRon, getObjectStateChunk,
-                                    mkStateChunk, newRon, reducibleOpType,
-                                    stateFromChunk, stateToChunk)
+                                    Replicated, advanceToObject, fromRon,
+                                    getObjectStateChunk, mkStateChunk, newRon,
+                                    reducibleOpType, stateFromChunk,
+                                    stateToChunk)
 import           RON.Error (MonadE, errorContext)
-import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
+import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util (Instance (Instance))
@@ -105,7 +106,7 @@ assignField
     -> m ()
 assignField field value = do
     StateChunk{stateBody} <- getObjectStateChunk
-    advanceToUuid stateVersion
+    advanceToObject
     let chunk = filter (\Op{refId} -> refId /= field) stateBody
     event <- getEventUuid
     p <- newRon value

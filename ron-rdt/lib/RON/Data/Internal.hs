@@ -20,6 +20,7 @@ module RON.Data.Internal (
     ReplicatedAsPayload (..),
     Unapplied,
     WireReducer,
+    advanceToObject,
     eqPayload,
     eqRef,
     getObjectStateChunk,
@@ -246,17 +247,23 @@ modifyObjectStateChunk
     :: (MonadObjectState a m, ReplicaClock m, MonadE m)
     => (StateChunk -> m (b, StateChunk)) -> m b
 modifyObjectStateChunk f = do
+    advanceToObject
     Object uuid <- ask
-    chunk@StateChunk{stateBody} <- getObjectStateChunk
+    chunk <- getObjectStateChunk
+    (a, chunk') <- f chunk
+    modify' $ Map.insert uuid chunk'
+    pure a
+
+advanceToObject :: (MonadE m, MonadObjectState a m, ReplicaClock m) => m ()
+advanceToObject = do
+    Object uuid <- ask
+    StateChunk{stateBody} <- getObjectStateChunk
     advanceToUuid $
         maximumDef
             uuid
             [ max opId $ maximumDef refId $ mapMaybe atomAsUuid payload
-            | Op{opId, refId, payload} <- stateBody
-            ]
-    (a, chunk') <- f chunk
-    modify' $ Map.insert uuid chunk'
-    pure a
+                | Op{opId, refId, payload} <- stateBody
+                ]
 
 atomAsUuid :: Atom -> Maybe UUID
 atomAsUuid = \case

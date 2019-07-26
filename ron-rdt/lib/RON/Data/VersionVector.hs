@@ -64,7 +64,6 @@ instance ReplicatedAsObject VersionVector where
     newObject (VersionVector vv) = do
         oid <- getEventUuid
         let ops = Map.elems vv
-        let stateVersion = maximumDef oid $ map opId ops
         modify' $
             (<>) $ Map.singleton oid $
             StateChunk{stateType = vvType, stateBody = ops}
