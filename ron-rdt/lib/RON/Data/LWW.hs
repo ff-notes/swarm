@@ -29,7 +29,7 @@ import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
                                     stateToChunk)
 import           RON.Error (MonadE, errorContext)
 import           RON.Event (ReplicaClock, getEventUuid)
-import           RON.Semilattice (BoundedSemilattice, Semilattice)
+import           RON.Semilattice (Semilattice)
 import           RON.Types (Atom (AUuid), Object (..), Op (..), StateChunk (..),
                             StateFrame, UUID)
 import           RON.Util (Instance (Instance))
@@ -48,8 +48,6 @@ instance Semigroup LwwRep where
         LwwRep $ Map.unionWith lww fields1 fields2
 
 instance Semilattice LwwRep where
-
-instance BoundedSemilattice LwwRep where
 
 instance Reducible LwwRep where
     reducibleOpType = lwwType

@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
@@ -8,9 +7,7 @@ import           RON.Prelude
 
 import qualified Data.ByteString.Lazy.Char8 as BSLC
 import           Data.String.Interpolate.IsString (i)
-import           GHC.Stack (withFrozenCallStack)
-import           Hedgehog (MonadTest, Property, evalEither, property, (===))
-import           Hedgehog.Internal.Property (failWith)
+import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 
 import           RON.Data (evalObjectState, getObject, newObjectState,
                            runObjectState)
@@ -19,7 +16,7 @@ import qualified RON.Data.ORSet as ORSet
 import           RON.Data.RGA (RGA (RGA))
 import qualified RON.Data.RGA as RGA
 import           RON.Event (ReplicaId, applicationSpecific)
-import           RON.Event.Simulation (runNetworkSim, runReplicaSim)
+import           RON.Event.Simulation (runNetworkSimT, runReplicaSimT)
 import           RON.Text (parseObject, serializeObject)
 import           RON.Util (ByteStringL)
 
@@ -49,7 +46,7 @@ state1expect = [i|
     *set    #(9NFGUW                @`          !
 
             #(IdJV2W                @`          !
-                                    @(1KqirW    >int1   =275
+                                    @(1KqirW    >int1   275
                                     @(4bX_UW    >opt5   >none
                                     @(6g0dUW    >set4   >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW    >str2   >B/0000GrVLcW+r3pl1c4
@@ -81,17 +78,17 @@ state4expect = [i|
                                     @(6g0dUW                >set4 >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW                >str2 >B/0000GrVLcW+r3pl1c4
                                     @(IGnZdW    :`(dMD0UW   >str3
-                                    @(MDl2MW    :0          >int1 =166
+                                    @(MDl2MW    :0          >int1 166
                                     @(_s30UW                >str3 '206'
                                     @(qRyXUW                >nst6 >B/0000txA_UW+r3pl1c4
 
             #(oCJV2W                @`                      !
-                                    @(dnL0UW                >int1 =135
+                                    @(dnL0UW                >int1 135
                                     @(eLa0UW                >str2 >B/0000kG~LcW+r3pl1c4
                                     @(n2nZdW                >str3 '137'
 
             #(txA_UW                @`                      !
-                                    @(sgJfUW                >int1 =138
+                                    @(sgJfUW                >int1 138
     .
     |]
 
@@ -108,12 +105,12 @@ example4expect = StructSet13
 prop_structSet :: Property
 prop_structSet = property $ do
     -- create an object
-    let state1 = runNetworkSim $ runReplicaSim replica $ newObjectState example0
+    state1 <- runNetworkSimT $ runReplicaSimT replica $ newObjectState example0
     let (oid, state1ser) = serializeObject state1
     prep state1expect === prep state1ser
 
     -- parse newly created object
-    state2 <- evalEitherS $ parseObject oid state1ser
+    state2 <- evalEither $ parseObject oid state1ser
     state1 === state2
 
     -- decode newly created object
@@ -122,8 +119,8 @@ prop_structSet = property $ do
 
     -- apply operations to the object (frame)
     ((str3Value, opt5Value, nst6Value), state4) <-
-        evalEither $
-        runNetworkSim $ runReplicaSim replica $ runExceptT $
+        evalExceptT $
+        runNetworkSimT $ runReplicaSimT replica $
         runObjectState state2 $ do
             -- plain field
             int1_assign 166
@@ -150,8 +147,3 @@ prop_structSet = property $ do
 
   where
     prep = filter (not . null) . map BSLC.words . BSLC.lines
-
-evalEitherS :: (MonadTest m, HasCallStack) => Either String a -> m a
-evalEitherS = \case
-    Left  x -> withFrozenCallStack $ failWith Nothing x
-    Right a -> pure a

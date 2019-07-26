@@ -16,7 +16,7 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal
 import           RON.Event (getEventUuid)
-import           RON.Semilattice (BoundedSemilattice, Semilattice)
+import           RON.Semilattice (Semilattice)
 import           RON.Types (Object (Object), Op (..), StateChunk (..),
                             UUID (UUID))
 import qualified RON.UUID as UUID
@@ -46,8 +46,6 @@ instance Monoid VersionVector where
     mempty = VersionVector mempty
 
 instance Semilattice VersionVector
-
-instance BoundedSemilattice VersionVector
 
 instance Reducible VersionVector where
     reducibleOpType = vvType

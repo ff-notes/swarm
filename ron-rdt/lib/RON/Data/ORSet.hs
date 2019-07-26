@@ -48,7 +48,7 @@ import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
 import qualified RON.Data.Internal
 import           RON.Error (MonadE, errorContext, throwErrorText)
 import           RON.Event (ReplicaClock, getEventUuid)
-import           RON.Semilattice (BoundedSemilattice, Semilattice)
+import           RON.Semilattice (Semilattice)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId),
                             StateChunk (StateChunk, stateBody, stateType, stateVersion),
@@ -79,8 +79,6 @@ instance Monoid ORSetRep where
     mempty = ORSetRep mempty
 
 instance Semilattice ORSetRep
-
-instance BoundedSemilattice ORSetRep
 
 instance Reducible ORSetRep where
     reducibleOpType = setType
