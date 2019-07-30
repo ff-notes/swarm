@@ -72,15 +72,15 @@ mkReplicatedStructLww structResolved = do
 mkReplicatedStructSet :: StructSet Resolved -> TH.DecsQ
 mkReplicatedStructSet structResolved = do
     dataType               <- mkDataTypeSet             struct
-    [instanceSemigroup]    <- mkInstanceSemigroup       name' (Map.keys fields)
-    [instanceMonoid]       <- mkInstanceMonoid          name' (Map.keys fields)
+    -- [instanceSemigroup]    <- mkInstanceSemigroup       name' (Map.keys fields)
+    -- [instanceMonoid]       <- mkInstanceMonoid          name' (Map.keys fields)
     [instanceReplicated]   <- mkInstanceReplicated      type'
     [instanceReplicatedBS] <- mkInstanceReplicatedBS    type'
     [instanceReplicatedAO] <- mkInstanceReplicatedAOSet struct
     accessors <- fold <$> traverse (mkAccessorsSet name' annotations) fields
     pure
         $ dataType
-        : instanceSemigroup  : instanceMonoid
+        -- : instanceSemigroup  : instanceMonoid
         : instanceReplicated : instanceReplicatedBS : instanceReplicatedAO
         : accessors
   where
@@ -123,43 +123,43 @@ mkDataTypeSet Struct{name, fields, annotations} =
             [ TH.varBangType (mkNameT $ mkHaskellFieldName annotations fieldName) $
                 TH.bangType
                     (TH.bang TH.sourceNoUnpack TH.sourceStrict)
-                    [t| [ $(mkGuideType ronType) ] |]
+                    [t| Maybe $(mkGuideType ronType) |]
             | (fieldName, FieldEquipped{ronType}) <- Map.assocs fields
             ]]
         []
   where
     name' = mkNameT name
 
-mkInstanceSemigroup :: TH.Name -> [Text] -> TH.Q [TH.Dec]
-mkInstanceSemigroup typeName fieldNames = do
-    (p1Names, p1) <- mkPat
-    (p2Names, p2) <- mkPat
-    let e   = recConE typeName
-            $ zipWith fieldExp (map mkNameT fieldNames)
-            $ zipWith append p1Names p2Names
-    [d| instance Semigroup $(conT typeName) where
-            $p1 <> $p2 = $e
-        |]
-  where
-    mkPat = do
-        names <- traverse (newName . Text.unpack) fieldNames
-        pure
-            ( names
-            , TH.recP typeName $
-                zipWith TH.fieldPat (map mkNameT fieldNames) (map varP names)
-            )
-    append x y = [| $(varE x) ++ $(varE y) |]
+-- mkInstanceSemigroup :: TH.Name -> [Text] -> TH.Q [TH.Dec]
+-- mkInstanceSemigroup typeName fieldNames = do
+--     (p1Names, p1) <- mkPat
+--     (p2Names, p2) <- mkPat
+--     let e   = recConE typeName
+--             $ zipWith fieldExp (map mkNameT fieldNames)
+--             $ zipWith append p1Names p2Names
+--     [d| instance Semigroup $(conT typeName) where
+--             $p1 <> $p2 = $e
+--         |]
+--   where
+--     mkPat = do
+--         names <- traverse (newName . Text.unpack) fieldNames
+--         pure
+--             ( names
+--             , TH.recP typeName $
+--                 zipWith TH.fieldPat (map mkNameT fieldNames) (map varP names)
+--             )
+--     append x y = [| $(varE x) <> $(varE y) |]
 
-mkInstanceMonoid :: TH.Name -> [Text] -> TH.Q [TH.Dec]
-mkInstanceMonoid typeName fieldNames =
-    [d| instance Monoid $(conT typeName) where
-            mempty = $e
-        |]
-  where
-    e = recConE typeName
-            [ fieldExp (mkNameT fieldName) [| [] |]
-            | fieldName <- fieldNames
-            ]
+-- mkInstanceMonoid :: TH.Name -> [Text] -> TH.Q [TH.Dec]
+-- mkInstanceMonoid typeName fieldNames =
+--     [d| instance Monoid $(conT typeName) where
+--             mempty = $e
+--         |]
+--   where
+--     e = recConE typeName
+--             [ fieldExp (mkNameT fieldName) [| [] |]
+--             | fieldName <- fieldNames
+--             ]
 
 mkInstanceReplicated :: TH.TypeQ -> TH.DecsQ
 mkInstanceReplicated type' = [d|
@@ -222,7 +222,7 @@ mkInstanceReplicatedAOSet Struct{name, fields, annotations} = do
     ops  <- newName "ops"
     vars <- traverse (newNameT . haskellName) fields
     let packFields = listE
-            [ [| ($ronName', map Instance $(varE var)) |]
+            [ [| ($ronName', fmap Instance $(varE var)) |]
             | FieldEquipped{ronName} <- toList fields
             , let ronName' = liftData ronName
             | var <- toList vars
@@ -231,8 +231,8 @@ mkInstanceReplicatedAOSet Struct{name, fields, annotations} = do
             [ bindS
                 (varP var)
                 [| errorContext $(liftText haskellName) $
-                    ORSet.viewField $ronName' $(varE ops) |]
-            | FieldEquipped{haskellName, ronName} <- toList fields
+                    $(orSetViewField ronType) $ronName' $(varE ops) |]
+            | FieldEquipped{haskellName, ronName, ronType} <- toList fields
             , let ronName' = liftData ronName
             | var <- toList vars
             ]
@@ -322,8 +322,11 @@ mkAccessorsSet name' annotations field = do
         readF =
             [ sigD read [t|
                 (MonadE $m, MonadObjectState $type' $m)
-                => $m [ $fieldGuideType ] |]
-            , valDP read [| ORSet.readField $ronName' |]
+                => $m (Maybe $fieldGuideType) |]
+            , valDP read
+                [| do
+                    chunk <- getObjectStateChunk
+                    $(orSetViewField ronType) $ronName' chunk |]
             ]
         zoomF =
             [ sigD zoom [t|
@@ -341,3 +344,8 @@ mkAccessorsSet name' annotations field = do
     assign = mkNameT $ mkHaskellFieldName annotations haskellName <> "_assign"
     read   = mkNameT $ mkHaskellFieldName annotations haskellName <> "_read"
     zoom   = mkNameT $ mkHaskellFieldName annotations haskellName <> "_zoom"
+
+orSetViewField :: RonType -> TH.ExpQ
+orSetViewField ronType = case mergeStrategy ronType of
+    ReplicatedBoundedSemilattice -> varE 'ORSet.viewFieldMerge
+    LWW                          -> varE 'ORSet.viewFieldLWW

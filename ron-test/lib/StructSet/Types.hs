@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -7,6 +9,7 @@ module StructSet.Types where
 
 import           RON.Prelude
 
+import           Data.Default (Default)
 import           RON.Schema.TH (mkReplicated)
 
 [mkReplicated|
@@ -19,5 +22,7 @@ import           RON.Schema.TH (mkReplicated)
         nst6 StructSet13)
 |]
 
-deriving instance Eq   StructSet13
-deriving instance Show StructSet13
+deriving instance Default StructSet13
+deriving instance Eq      StructSet13
+deriving instance Generic StructSet13
+deriving instance Show    StructSet13

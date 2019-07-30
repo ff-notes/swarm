@@ -52,7 +52,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
 import           RON.Error (MonadE, errorContext, liftMaybe, throwErrorText)
-import           RON.Event (ReplicaClock, advanceToUuid, getEventUuid)
+import           RON.Event (ReplicaClock, advanceToUuid)
 import           RON.Semilattice (BoundedSemilattice)
 import           RON.Types (Atom (AInteger, AString, AUuid), Object (Object),
                             ObjectFrame (ObjectFrame, frame, uuid),
@@ -303,10 +303,10 @@ instance ReplicatedBoundedSemilattice a =>
     ReplicatedBoundedSemilattice (Maybe a) where
 
     rconcat payloads = case payloads' of
-        [] -> pure Nothing
-        _  -> Just <$> rconcat payloads'
+        []   -> pure Nothing
+        p:ps -> Just <$> rconcat (p :| ps)
       where
-        payloads' = [targetPayload | Some : targetPayload <- payloads]
+        payloads' = [targetPayload | Some : targetPayload <- toList payloads]
 
 pattern ATrue :: Atom
 pattern ATrue = AUuid (UUID 0xe36e69000000000 0)  -- true
@@ -347,9 +347,7 @@ advanceToObject = do
         _       -> Nothing
 
 class Replicated a => ReplicatedBoundedSemilattice a where
-    rconcat
-        :: (MonadE m, MonadState StateFrame m, ReplicaClock m)
-        => [Payload] -> m a
+    rconcat :: (MonadE m, MonadState StateFrame m) => NonEmpty Payload -> m a
 
 reduceState :: forall a . Reducible a => StateChunk -> StateChunk -> StateChunk
 reduceState s1 s2 =
@@ -357,23 +355,19 @@ reduceState s1 s2 =
 
 reduceObjectStates
     :: forall a m
-    . (MonadE m, MonadState StateFrame m, ReplicaClock m, ReplicatedAsObject a)
-    => [Object a] -> m (Object a)
-reduceObjectStates = \case
-    [] ->
-        -- create an empty object, i.e. just a UUID without state
-        Object <$> getEventUuid
-    obj:objs -> do
-        chunks <- for (obj :| objs) $ runReaderT getObjectStateChunk
-        let chunk = foldl1 (reduceState @(Rep a)) chunks
-        let oid = minimum [i | Object i <- obj:objs]
-        modify' $ Map.insert oid chunk
-        pure $ Object oid
+    . (MonadE m, MonadState StateFrame m, ReplicatedAsObject a)
+    => NonEmpty (Object a) -> m (Object a)
+reduceObjectStates (obj :| objs) = do
+    chunks <- for (obj :| objs) $ runReaderT getObjectStateChunk
+    let chunk = foldl1 (reduceState @(Rep a)) chunks
+    let oid = minimum [i | Object i <- obj:objs]
+    modify' $ Map.insert oid chunk
+    pure $ Object oid
 
 objectRconcat
     :: forall a m
-    . (MonadE m, MonadState StateFrame m, ReplicaClock m, ReplicatedAsObject a)
-    => [Payload] -> m a
+    . (MonadE m, MonadState StateFrame m, ReplicatedAsObject a)
+    => NonEmpty Payload -> m a
 objectRconcat payloads = do
     states <- for payloads $ fmap Object . fromPayload
     Object ref <- reduceObjectStates @a states

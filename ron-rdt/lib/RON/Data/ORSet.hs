@@ -24,10 +24,8 @@ module RON.Data.ORSet (
     -- * struct_set
     assignField,
     newStruct,
-    readField,
-    viewField,
-    viewFieldFolded,
-    viewFieldLww,
+    viewFieldLWW,
+    viewFieldMerge,
     zoomField,
 ) where
 
@@ -269,58 +267,31 @@ isAliveField field = \case
     Op{refId = Zero, payload = AUuid field' : _} -> field == field'
     _ -> False
 
--- | Decode field value
-viewField
-    ::  ( MonadE m
-        , MonadState StateFrame m
-        , Replicated a
-        )
-    =>  UUID        -- ^ Field name
-    ->  StateChunk  -- ^ ORSet object chunk
-    ->  m [a]
-viewField field StateChunk{stateBody}
-    = errorContext "ORSet.viewField"
-    $ traverse (fromRon . drop 1 . payload)
-    $ filter (isAliveField field) stateBody
-
--- | Decode field value
-viewFieldFolded
-    ::  ( MonadE m
-        , MonadState StateFrame m
-        , ReplicatedBoundedSemilattice a
-        , ReplicaClock m
-        )
-    =>  UUID        -- ^ Field name
-    ->  StateChunk  -- ^ ORSet object chunk
-    ->  m a
-viewFieldFolded field StateChunk{stateBody} =
-    rconcat $ map (drop 1 . payload) $ filter (isAliveField field) stateBody
-
--- | Decode field value
-viewFieldLww
-    :: (MonadE m, MonadState StateFrame m, Replicated a)
+-- | Decode field value, merge all versions, return 'Nothing' if no versions
+viewFieldMerge
+    :: (MonadE m, MonadState StateFrame m, ReplicatedBoundedSemilattice a)
     => UUID        -- ^ Field name
     -> StateChunk  -- ^ ORSet object chunk
-    -> m a         -- ^ TODO(2019-07-23, cblp) Maybe?
-viewFieldLww field StateChunk{stateBody} =
-    errorContext "ORSet.viewFieldLww" $ do
+    -> m (Maybe a)
+viewFieldMerge field StateChunk{stateBody} =
+    case filter (isAliveField field) stateBody of
+        []     -> pure Nothing
+        op:ops -> fmap Just . rconcat $ fmap (drop 1 . payload) $ op :| ops
+
+-- | Decode field value, keep last version only
+viewFieldLWW
+    :: (MonadE m, MonadState StateFrame m, Replicated a)
+    => UUID         -- ^ Field name
+    -> StateChunk   -- ^ ORSet object chunk
+    -> m (Maybe a)
+viewFieldLWW field StateChunk{stateBody} =
+    errorContext "ORSet.viewFieldLWW" $ do
         let ops = sortOn (Down . opId) $ filter (isAliveField field) stateBody
         case ops of
-            Op{payload = _field : valuePayload} : _ -> fromRon valuePayload
+            Op{payload = _field : valuePayload} : _ ->
+                Just <$> fromRon valuePayload
             Op{payload = []} : _ -> error "a field without a field tag found"
-            [] -> throwError "no version of LWW field found"
-
--- | Read field value
-readField
-    ::  ( MonadE m
-        , MonadObjectState struct m
-        , Replicated a
-        )
-    =>  UUID  -- ^ Field name
-    ->  m [a]
-readField field = do
-    stateChunk <- getObjectStateChunk
-    viewField field stateChunk
+            [] -> pure Nothing
 
 -- | Pseudo-lens to an object inside a specified field
 zoomField
@@ -349,11 +320,11 @@ zoomField field innerModifier =
 -- | Create an ORSet object from a list of named fields.
 newStruct
     :: (MonadState StateFrame m, ReplicaClock m)
-    => [(UUID, [Instance Replicated])] -> m UUID
+    => [(UUID, Maybe (Instance Replicated))] -> m UUID
 newStruct fields = do
     stateBody <-
         fmap fold $ for fields $ \(name, values) ->
-            for values $ \(Instance value) -> do
+            for (toList values) $ \(Instance value) -> do
                 opId <- getEventUuid  -- TODO(2019-07-12, cblp) sequential
                 valuePayload <- newRon value
                 pure Op{opId, refId = Zero, payload = AUuid name : valuePayload}

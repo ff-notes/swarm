@@ -2,6 +2,8 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -11,6 +13,7 @@ module RON.Schema (
     CaseTransform (..),
     Declaration (..),
     Field (..),
+    MergeStrategy (..),
     Opaque (..),
     OpaqueAnnotations (..),
     RonType (..),
@@ -30,6 +33,7 @@ module RON.Schema (
     UseType,
     defaultOpaqueAnnotations,
     defaultStructAnnotations,
+    mergeStrategy,
     opaqueAtoms,
     opaqueAtoms_,
     opaqueObject,
@@ -148,3 +152,18 @@ opaqueAtoms_ tyname = TOpaque $ Opaque False tyname defaultOpaqueAnnotations
 
 data Alias stage = Alias{name :: Text, target :: UseType stage}
 deriving instance Show (UseType stage) => Show (Alias stage)
+
+data MergeStrategy
+    = ReplicatedBoundedSemilattice
+    | LWW
+
+mergeStrategy :: RonType -> MergeStrategy
+mergeStrategy = \case
+    TAtom       _                -> LWW
+    TComposite  t                -> case t of
+        TEnum   _                -> LWW
+        TOption _                -> ReplicatedBoundedSemilattice
+    TObject     _                -> ReplicatedBoundedSemilattice
+    TOpaque     Opaque{isObject}
+        | isObject               -> ReplicatedBoundedSemilattice
+        | otherwise              -> LWW

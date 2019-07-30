@@ -6,6 +6,7 @@ module StructSet (prop_structSet) where
 import           RON.Prelude
 
 import qualified Data.ByteString.Lazy.Char8 as BSLC
+import           Data.Default (def)
 import           Data.String.Interpolate.IsString (i)
 import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 
@@ -24,12 +25,12 @@ import           StructSet.Types
 
 example0 :: StructSet13
 example0 = StructSet13
-    { int1 = [275]
-    , str2 = [RGA "275"]
-    , str3 = ["190"]
-    , set4 = [ORSet []]
-    , opt5 = [Nothing]
-    , nst6 = []
+    { int1 = Just 275
+    , str2 = Just $ RGA "275"
+    , str3 = Just "190"
+    , set4 = Just $ ORSet []
+    , opt5 = Just Nothing
+    , nst6 = Nothing
     }
 
 -- | "r3pl1c4"
@@ -94,12 +95,13 @@ state4expect = [i|
 
 example4expect :: StructSet13
 example4expect = StructSet13
-    { int1 = [166]
-    , str2 = [RGA "145"]
-    , str3 = ["206"]
-    , set4 = [ORSet [mempty{int1 = [135], str2 = [RGA "136"], str3 = ["137"]}]]
-    , opt5 = [Nothing]
-    , nst6 = [mempty{int1 = [138]}]
+    { int1 = Just 166
+    , str2 = Just $ RGA "145"
+    , str3 = Just "206"
+    , set4 = Just $
+        ORSet [def{int1 = Just 135, str2 = Just $ RGA "136", str3 = Just "137"}]
+    , opt5 = Just Nothing
+    , nst6 = Just def{int1 = Just 138}
     }
 
 prop_structSet :: Property
@@ -129,14 +131,17 @@ prop_structSet = property $ do
             str3_assign "206"
             set4_zoom $
                 ORSet.addValue
-                    mempty{int1 = [135], str2 = [RGA "136"], str3 = ["137"]}
+                    def { int1 = Just 135
+                        , str2 = Just $ RGA "136"
+                        , str3 = Just "137"
+                        }
             opt5Value <- opt5_read
             nst6Value <- nst6_read
-            nst6_assign mempty{int1 = [138]}
+            nst6_assign def{int1 = Just 138}
             pure (str3Value, opt5Value, nst6Value)
-    str3Value === ["190"]
-    opt5Value === [Nothing]
-    nst6Value === []
+    str3Value === Just "190"
+    opt5Value === Just Nothing
+    nst6Value === Nothing
 
     -- decode object after modification
     example4 <- evalEither $ evalObjectState state4 getObject
