@@ -256,7 +256,7 @@ mkInstanceReplicatedAOSet Struct{name, fields, annotations} = do
             ++  [noBindS [| pure $consE |]]
     [d| instance ReplicatedAsObject $type' where
             type Rep $type' = ORSetRep
-            newObject $consP = Object <$> ORSet.newObject $packFields
+            newObject $consP = Object <$> ORSet.newStruct $packFields
             getObject = errorContext $(liftText errCtx) $getObjectImpl
         |]
   where

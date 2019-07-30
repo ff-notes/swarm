@@ -23,8 +23,8 @@ import           RON.Prelude
 import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
-                                    Replicated, advanceToObject, fromRon,
-                                    getObjectStateChunk, newRon,
+                                    Replicated, fromRon, getObjectStateChunk,
+                                    modifyObjectStateChunk_, newRon,
                                     reducibleOpType, stateFromChunk,
                                     stateToChunk)
 import           RON.Error (MonadE, errorContext)
@@ -120,8 +120,7 @@ assignField field value =
         p <- newRon value
         let newOp = Op event field p
         let chunk' = sortOn refId $ newOp : chunk
-        pure StateChunk
-            {stateVersion = event, stateBody = chunk', stateType = lwwType}
+        pure StateChunk{stateBody = chunk', stateType = lwwType}
 
 -- | Pseudo-lens to an object inside a specified field
 zoomField

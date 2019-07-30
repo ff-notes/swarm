@@ -9,7 +9,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSLC
 import           Data.String.Interpolate.IsString (i)
 import           Hedgehog (Property, evalEither, evalExceptT, property, (===))
 
-import           RON.Data (evalObjectState, getObject, newObjectState,
+import           RON.Data (evalObjectState, getObject, newObjectFrame,
                            runObjectState)
 import           RON.Data.ORSet (ORSet (ORSet))
 import qualified RON.Data.ORSet as ORSet
@@ -38,57 +38,57 @@ replica = applicationSpecific 0xd83d30067100000
 
 state1expect :: ByteStringL
 state1expect = [i|
-    *rga    #B/0000GrVLcW+r3pl1c4   @`(EWD0g8   !
-                                    @)6         '2'
+    *rga    #B/0000GrVLcW+r3pl1c4               !
+                                    @`(EWD0g6   '2'
                                     @)7         '7'
                                     @)8         '5'
 
-    *set    #(9NFGUW                @`          !
+    *set    #(9NFGUW                @0          !
 
-            #(IdJV2W                @`          !
-                                    @(1KqirW    >int1   275
+            #(IdJV2W                            !
+                                    @`(1KqirW   >int1   275
                                     @(4bX_UW    >opt5   >none
                                     @(6g0dUW    >set4   >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW    >str2   >B/0000GrVLcW+r3pl1c4
                                     @(IGnZdW    >str3   '190'
     .
     |]
--- TODO(2019-07-23, cblp) why not compressed to ">str2 >0000GrVLcW"?
 
+-- | TODO (2019-07-30, cblp) BUG! #(IdJV2W @` :0 >int1 166 -- impossible
 state4expect :: ByteStringL
 state4expect = [i|
-    *rga    #B/0000GrVLcW+r3pl1c4   @`(X6VGUW               !
-                                    @(EWD0g6    :`(RgJfUW   '2'
-                                    @)7         :(SxA_UW    '7'
-                                    @(TEddUW    :0          '1'
-                                    @(X6VGUW                '4'
+    *rga    #B/0000GrVLcW+r3pl1c4                           !
+                                    @`(EWD0g6   :`(PRyXUW   '2'
+                                    @)7         :(RgJfUW    '7'
+                                    @(SxA_UW    :0          '1'
+                                    @(TEddUW                '4'
                                     @(EWD0g8                '5'
 
-            #(kG~LcW                @(hOy0g8                !
-                                    @)6                     '1'
+            #(eQ~LcW                @0                      !
+                                    @`[JT0g6                '1'
                                     @)7                     '3'
                                     @)8                     '6'
 
-    *set    #(9NFGUW                @(oil2MW                !
-                                    @                       >(oCJV2W
+    *set    #(9NFGUW                @0                      !
+                                    @`(jil2MW               >(fxJV2W
 
-            #(IdJV2W                @(qRyXUW                !
-                                    @(1KqirW    :`(PRyXUW   >int1
+            #(IdJV2W                @0                      !
+                                    @`(1KqirW   :`(MDl2MW   >int1
                                     @(4bX_UW    :0          >opt5 >none
                                     @(6g0dUW                >set4 >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW                >str2 >B/0000GrVLcW+r3pl1c4
-                                    @(IGnZdW    :`(dMD0UW   >str3
-                                    @(MDl2MW    :0          >int1 166
-                                    @(_s30UW                >str3 '206'
-                                    @(qRyXUW                >nst6 >B/0000txA_UW+r3pl1c4
+                                    @(IGnZdW    :`(_s30UW   >str3
+                                    @`          :0          >int1 166
+                                    @(X6VGUW                >str3 '206'
+                                    @(mRyXUW                >nst6 >B/0000pxA_UW+r3pl1c4
 
-            #(oCJV2W                @`                      !
-                                    @(dnL0UW                >int1 135
-                                    @(eLa0UW                >str2 >B/0000kG~LcW+r3pl1c4
-                                    @(n2nZdW                >str3 '137'
+            #(fxJV2W                @0                      !
+                                    @`(dMD0UW               >int1 135
+                                    @[nL0UW                 >str2 >B/0000eQ~LcW+r3pl1c4
+                                    @(frnZdW                >str3 '137'
 
-            #(txA_UW                @`                      !
-                                    @(sgJfUW                >int1 138
+            #(pxA_UW                @0                      !
+                                    @`(ogJfUW               >int1 138
     .
     |]
 
@@ -105,7 +105,7 @@ example4expect = StructSet13
 prop_structSet :: Property
 prop_structSet = property $ do
     -- create an object
-    state1 <- runNetworkSimT $ runReplicaSimT replica $ newObjectState example0
+    state1 <- runNetworkSimT $ runReplicaSimT replica $ newObjectFrame example0
     let (oid, state1ser) = serializeObject state1
     prep state1expect === prep state1ser
 

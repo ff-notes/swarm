@@ -136,8 +136,6 @@ class Replicated a where
     -- 'payloadEncoding'
     encoding :: Encoding a
 
-type Payload = [Atom]
-
 data Encoding a = Encoding
     { encodingNewRon
         :: forall m

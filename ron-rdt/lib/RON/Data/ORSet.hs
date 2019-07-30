@@ -23,7 +23,7 @@ module RON.Data.ORSet (
     zoomItem,
     -- * struct_set
     assignField,
-    newObject,
+    newStruct,
     readField,
     viewField,
     viewFieldFolded,
@@ -37,11 +37,12 @@ import qualified Data.Map.Strict as Map
 
 import           RON.Data.Internal (MonadObjectState, ObjectStateT, Reducible,
                                     Replicated, ReplicatedAsObject,
-                                    ReplicatedAsPayload, encoding, eqPayload,
-                                    eqRef, fromRon, getObject,
+                                    ReplicatedAsPayload,
+                                    ReplicatedBoundedSemilattice, encoding,
+                                    eqPayload, eqRef, fromRon, getObject,
                                     getObjectStateChunk,
                                     modifyObjectStateChunk_, newObject, newRon,
-                                    objectEncoding, objectOpType,
+                                    objectEncoding, objectRconcat, rconcat,
                                     reducibleOpType, stateFromChunk,
                                     stateToChunk)
 import qualified RON.Data.Internal
@@ -50,7 +51,9 @@ import           RON.Event (ReplicaClock, getEventUuid)
 import           RON.Semilattice (Semilattice)
 import           RON.Types (Atom (AUuid), Object (Object),
                             Op (Op, opId, payload, refId), Payload,
-                            StateChunk (StateChunk, stateBody, stateType), UUID)
+                            StateChunk (StateChunk, stateBody, stateType),
+                            StateFrame, UUID)
+import           RON.Util (Instance (Instance))
 import           RON.UUID (pattern Zero)
 import qualified RON.UUID as UUID
 
@@ -259,8 +262,7 @@ assignField field value =
             tombstone <- getEventUuid  -- TODO(2019-07-10, cblp) sequential
             pure op{refId = tombstone, payload = [AUuid field]}
         let stateBody2 = sortOn opId $ addOp : removeOps ++ stateBody1
-        pure StateChunk
-            {stateVersion = event, stateBody = stateBody2, stateType = setType}
+        pure StateChunk{stateBody = stateBody2, stateType = setType}
 
 isAliveField :: UUID -> Op -> Bool
 isAliveField field = \case
@@ -345,10 +347,10 @@ zoomField field innerModifier =
                     \ use 'reduceStates'"
 
 -- | Create an ORSet object from a list of named fields.
-newObject
+newStruct
     :: (MonadState StateFrame m, ReplicaClock m)
     => [(UUID, [Instance Replicated])] -> m UUID
-newObject fields = do
+newStruct fields = do
     stateBody <-
         fmap fold $ for fields $ \(name, values) ->
             for values $ \(Instance value) -> do
@@ -358,5 +360,5 @@ newObject fields = do
     objectId <- getEventUuid
     modify' $
         (<>) $ Map.singleton objectId $
-        StateChunk{stateType = setType, stateVersion = objectId, stateBody}
+        StateChunk{stateType = setType, stateBody}
     pure objectId
