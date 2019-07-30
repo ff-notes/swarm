@@ -95,6 +95,11 @@ equipField haskellName FieldResolved{ronType} =
         Nothing -> error $
             "Field name is not representable in RON: " ++ show haskellName
 
+varBangType' :: Text -> TH.TypeQ -> TH.VarBangTypeQ
+varBangType' name
+    = TH.varBangType (mkNameT name)
+    . TH.bangType (TH.bang TH.noSourceUnpackedness TH.sourceStrict)
+
 mkDataTypeLww :: StructLww Equipped -> TH.DecQ
 mkDataTypeLww Struct{name, fields, annotations} =
     TH.dataD
@@ -103,8 +108,7 @@ mkDataTypeLww Struct{name, fields, annotations} =
         []
         Nothing
         [recC name'
-            [ TH.varBangType (mkNameT $ mkHaskellFieldName annotations fieldName) $
-                TH.bangType (TH.bang TH.sourceNoUnpack TH.sourceStrict) $
+            [ varBangType' (mkHaskellFieldName annotations fieldName) $
                 mkGuideType ronType
             | (fieldName, FieldEquipped{ronType}) <- Map.assocs fields
             ]]
@@ -120,10 +124,9 @@ mkDataTypeSet Struct{name, fields, annotations} =
         []
         Nothing
         [recC name'
-            [ TH.varBangType (mkNameT $ mkHaskellFieldName annotations fieldName) $
-                TH.bangType
-                    (TH.bang TH.sourceNoUnpack TH.sourceStrict)
-                    [t| Maybe $(mkGuideType ronType) |]
+            [ varBangType'
+                (mkHaskellFieldName annotations fieldName)
+                [t| Maybe $(mkGuideType ronType) |]
             | (fieldName, FieldEquipped{ronType}) <- Map.assocs fields
             ]]
         []
