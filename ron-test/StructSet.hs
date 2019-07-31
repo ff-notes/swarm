@@ -48,7 +48,7 @@ state1expect = [i|
 
             #(IdJV2W                            !
                                     @`(1KqirW   >int1   275
-                                    @(4bX_UW    >opt5   >none
+                                    @(4bX_UW    >opt5
                                     @(6g0dUW    >set4   >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW    >str2   >B/0000GrVLcW+r3pl1c4
                                     @(IGnZdW    >str3   '190'
@@ -75,7 +75,7 @@ state4expect = [i|
 
             #(IdJV2W                @0                      !
                                     @`(1KqirW   :`(MDl2MW   >int1
-                                    @(4bX_UW    :0          >opt5 >none
+                                    @(4bX_UW    :0          >opt5
                                     @(6g0dUW                >set4 >B/00009NFGUW+r3pl1c4
                                     @(AvZ0UW                >str2 >B/0000GrVLcW+r3pl1c4
                                     @(IGnZdW    :`(_s30UW   >str3
