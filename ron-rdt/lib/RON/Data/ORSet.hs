@@ -202,7 +202,7 @@ zoomItem (ORSetItem key) innerModifier = do
     let ORSetRep opMap = stateFromChunk stateBody
     itemValueRef <- case Map.lookup key opMap of
         Nothing ->
-            -- TODO(2019-07-08, cblp) creat empty object?
+            -- TODO(2019-07-08, cblp) create empty object?
             throwErrorText "no such key in ORSet"
         Just Op{payload} -> case payload of
             [AUuid itemValueRef] -> pure itemValueRef
@@ -260,6 +260,26 @@ isAliveField field = \case
     Op{refId = Zero, payload = AUuid field' : _} -> field == field'
     _ -> False
 
+filterAliveFieldPayloads
+    :: UUID               -- ^ field
+    -> [Op]               -- ^ state body
+    -> [Payload]  -- ^ value payloads
+filterAliveFieldPayloads field ops =
+    [ valuePayload
+    | Op{refId = Zero, payload = AUuid field' : valuePayload} <- ops
+    , field' == field
+    ]
+
+filterAliveFieldIdsAndPayloads
+    :: UUID               -- ^ field
+    -> [Op]               -- ^ state body
+    -> [(UUID, Payload)]  -- ^ op ids and value payloads
+filterAliveFieldIdsAndPayloads field ops =
+    [ (opId, valuePayload)
+    | Op{opId, refId = Zero, payload = AUuid field' : valuePayload} <- ops
+    , field' == field
+    ]
+
 -- | Decode field value, merge all versions, return 'Nothing' if no versions
 viewField
     :: (MonadE m, MonadState StateFrame m, ReplicatedBoundedSemilattice a)
@@ -267,9 +287,9 @@ viewField
     -> StateChunk  -- ^ ORSet object chunk
     -> m (Maybe a)
 viewField field StateChunk{stateBody} =
-    case filter (isAliveField field) stateBody of
-        []     -> pure Nothing
-        op:ops -> fmap Just . rconcat $ fmap (drop 1 . payload) $ op :| ops
+    case filterAliveFieldPayloads field stateBody of
+        []   -> pure Nothing
+        p:ps -> fmap Just . rconcat $ p :| ps
 
 -- | Decode field value, keep last version only
 viewFieldLWW
@@ -278,13 +298,10 @@ viewFieldLWW
     -> StateChunk   -- ^ ORSet object chunk
     -> m (Maybe a)
 viewFieldLWW field StateChunk{stateBody} =
-    errorContext "ORSet.viewFieldLWW" $ do
-        let ops = sortOn (Down . opId) $ filter (isAliveField field) stateBody
-        case ops of
-            Op{payload = _field : valuePayload} : _ ->
-                Just <$> fromRon valuePayload
-            Op{payload = []} : _ -> error "a field without a field tag found"
-            [] -> pure Nothing
+    errorContext "ORSet.viewFieldLWW" $
+    traverse fromRon $
+    fmap snd . maximumMayOn fst $
+    filterAliveFieldIdsAndPayloads field stateBody
 
 -- | Decode field value, keep max value only, only for Integer and Float
 viewFieldMax
@@ -293,12 +310,10 @@ viewFieldMax
     -> StateChunk   -- ^ ORSet object chunk
     -> m (Maybe a)
 viewFieldMax field StateChunk{stateBody} =
-    errorContext "ORSet.viewFieldMax" $ do
-        let ops = filter (isAliveField field) stateBody
-        values <- for ops $ \Op{payload} -> case payload of
-            _field : valuePayload -> fromPayload valuePayload
-            [] -> error "a field without a field tag found"
-        pure $ maximumMay values
+    errorContext "ORSet.viewFieldMax" $
+    fmap maximumMay $
+    traverse fromPayload $
+    filterAliveFieldPayloads field stateBody
 
 -- | Decode field value, keep min value only, only for Integer and Float
 viewFieldMin
@@ -307,12 +322,10 @@ viewFieldMin
     -> StateChunk   -- ^ ORSet object chunk
     -> m (Maybe a)
 viewFieldMin field StateChunk{stateBody} =
-    errorContext "ORSet.viewFieldMin" $ do
-        let ops = filter (isAliveField field) stateBody
-        values <- for ops $ \Op{payload} -> case payload of
-            _field : valuePayload -> fromPayload valuePayload
-            [] -> error "a field without a field tag found"
-        pure $ minimumMay values
+    errorContext "ORSet.viewFieldMin" $
+    fmap minimumMay $
+    traverse fromPayload $
+    filterAliveFieldPayloads field stateBody
 
 -- | Decode field value, keep all versions
 viewFieldSet
@@ -321,11 +334,8 @@ viewFieldSet
     -> StateChunk   -- ^ ORSet object chunk
     -> m [a]
 viewFieldSet field StateChunk{stateBody} =
-    errorContext "ORSet.viewFieldSet" $ do
-        let ops = filter (isAliveField field) stateBody
-        for ops $ \Op{payload} -> case payload of
-            _field : valuePayload -> fromRon valuePayload
-            [] -> error "a field without a field tag found"
+    errorContext "ORSet.viewFieldSet" $
+    traverse fromRon $ filterAliveFieldPayloads field stateBody
 
 -- | Pseudo-lens to an object inside a specified field
 zoomField
@@ -336,16 +346,16 @@ zoomField
 zoomField field innerModifier =
     errorContext ("ORSet.zoomField" <> show field) $ do
         StateChunk{stateBody} <- getObjectStateChunk
-        let ops = filter (isAliveField field) stateBody
-        case ops of
+        let objectIds =
+                [ objectId
+                | AUuid objectId : _ <- filterAliveFieldPayloads field stateBody
+                ]
+        case objectIds of
             [] ->
                 throwErrorText
                     "TODO(2019-07-12, cblp) create object for modifying;\
                     \ use 'reduceStates'"
-            [Op{payload}] -> case payload of
-                [_field, AUuid fieldObjectId] ->
-                    lift $ runReaderT innerModifier $ Object fieldObjectId
-                _ -> throwErrorText "TODO(2019-07-12, cblp) skip bad format?"
+            [objectId] -> lift $ runReaderT innerModifier $ Object objectId
             _:_:_ ->
                 throwErrorText
                     "TODO(2019-07-12, cblp) merge multiple object versions;\
