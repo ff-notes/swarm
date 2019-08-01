@@ -3,7 +3,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -49,7 +48,7 @@ import           RON.Data.LWW (LwwRep)
 import           RON.Data.ORSet (ORSetRep)
 import           RON.Data.RGA (RgaRep)
 import           RON.Data.VersionVector (VersionVector)
-import           RON.Error (MonadE, throwErrorText)
+import           RON.Error (MonadE, throwErrorString)
 import           RON.Types (ClosedOp (..), Object (Object),
                             ObjectFrame (ObjectFrame, frame, uuid), Op (..),
                             StateChunk (..), StateFrame, UUID,
@@ -158,8 +157,8 @@ reduceStateFrame s1 s2 =
             Just Reducer{stateReducer} ->
                 modify' $ Map.insertWith stateReducer oid chunk
             Nothing ->
-                throwErrorText $
-                "Cannot reduce StateFrame of unknown type " <> show stateType
+                throwErrorString $
+                "Cannot reduce StateFrame of unknown type " ++ show stateType
 
 unsafeReduceObject
     :: MonadE m => ObjectFrame a -> StateFrame -> m (ObjectFrame a)
@@ -171,7 +170,7 @@ unsafeReduceObject obj@ObjectFrame{frame = s1} s2 = do
 reduceObject :: MonadE m => ObjectFrame a -> ObjectFrame a -> m (ObjectFrame a)
 reduceObject o1@ObjectFrame{uuid = id1} ObjectFrame{uuid = id2, frame = frame2}
     | id1 == id2 = unsafeReduceObject o1 frame2
-    | otherwise  = throwErrorText $ "Object ids differ: " <> show (id1, id2)
+    | otherwise  = throwErrorString $ "Object ids differ: " ++ show (id1, id2)
 
 newtype MaxOnFst a b = MaxOnFst (a, b)
 
