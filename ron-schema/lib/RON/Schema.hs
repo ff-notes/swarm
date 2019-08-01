@@ -79,7 +79,7 @@ data Struct (encoding :: StructEncoding) stage = Struct
     , annotations :: StructAnnotations
     }
 deriving instance
-    (Show (UseType stage), Show (XField stage)) => Show (StructLww stage)
+    (Show (UseType stage), Show (XField stage)) => Show (Struct encoding stage)
 
 type StructLww = Struct SELww
 
