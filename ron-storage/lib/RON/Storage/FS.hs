@@ -26,6 +26,7 @@ module RON.Storage.FS (
     -- * Handle
     Handle,
     newHandle,
+    newHandleWithReplicaId,
     -- * Storage
     Storage,
     runStorage,
@@ -46,6 +47,8 @@ import           System.Directory (canonicalizePath, createDirectoryIfMissing,
                                    listDirectory, removeFile, renameDirectory)
 import           System.FilePath ((</>))
 import           System.IO.Error (isDoesNotExistError)
+import           System.Random.TF (newTFGen)
+import           System.Random.TF.Instances (random)
 
 import           RON.Epoch (EpochClock, getCurrentEpochTime, runEpochClock)
 import           RON.Error (Error, throwErrorString)
@@ -146,9 +149,16 @@ emitDocumentChanged docid = Storage $ do
 -- | Create new storage handle
 newHandle :: FilePath -> IO Handle
 newHandle hDataDir = do
+    randomId <- fst . random <$> newTFGen
+    macAddress <- getMacAddress
+    let hReplicaId = fromMaybe randomId macAddress
+    newHandleWithReplicaId hDataDir hReplicaId
+
+newHandleWithReplicaId :: FilePath -> Word64 -> IO Handle
+newHandleWithReplicaId hDataDir hReplicaId = do
     time <- getCurrentEpochTime
     hClock <- newIORef time
-    hReplica <- applicationSpecific <$> getMacAddress
+    let hReplica = applicationSpecific hReplicaId
     hOnDocumentChanged <- newBroadcastTChanIO
     pure Handle{hDataDir, hClock, hReplica, hOnDocumentChanged}
 
@@ -165,12 +175,13 @@ docDir (DocId dir) = collectionName @a </> dir
 
 -- MAC address
 
-getMacAddress :: IO Word64
-getMacAddress = decodeMac <$> getMac where
+getMacAddress :: IO (Maybe Word64)
+getMacAddress = do
+    macAddress <- getMac
+    pure $ decodeMac <$> macAddress
+  where
     getMac
-        =   fromMaybe
-                (error "Can't get any non-zero MAC address of this machine")
-        .   listToMaybe
+        =   listToMaybe
         .   filter (/= minBound)
         .   map mac
         <$> getNetworkInterfaces
