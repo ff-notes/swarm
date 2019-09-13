@@ -6,7 +6,6 @@
 -- | RON Storage interface. For usage, see "RON.Storage.FS".
 module RON.Storage
   ( Collection (..),
-    CollectionDocId (..),
     CollectionName,
     DocId,
     createDocument,
@@ -35,8 +34,6 @@ import RON.Storage.Backend
     )
 import RON.Types (ObjectFrame, UUID)
 import qualified RON.UUID as UUID
-
-data CollectionDocId = forall a. Collection a => CollectionDocId (DocId a)
 
 -- | Load all versions of a document
 loadDocument :: (Collection a, MonadStorage m) => DocId a -> m (Document a)
