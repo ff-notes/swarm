@@ -27,7 +27,10 @@ module RON.Storage.FS
     -- * Storage
     Storage,
     runStorage,
-    watch,
+    -- ** Listening to changes
+    StopListening,
+    subscribe,
+    subscribeBlocking,
   )
 where
 
@@ -42,6 +45,7 @@ import Control.Concurrent.STM
 import Control.Monad (forever)
 import Data.Bits (shiftL)
 import qualified Data.ByteString.Lazy as BSL
+import Data.Maybe (isJust)
 import Network.Info (MAC (MAC), getNetworkInterfaces, mac)
 import RON.Epoch (EpochClock, getCurrentEpochTime, runEpochClock)
 import RON.Error (Error, throwErrorString)
@@ -74,10 +78,14 @@ import System.Directory
     doesDirectoryExist,
     doesPathExist,
     listDirectory,
+    makeAbsolute,
     removeFile,
     renameDirectory,
   )
-import System.FilePath ((</>))
+import qualified System.FSNotify as FSNotify
+import System.FSNotify (StopListening)
+import System.FilePath ((</>), makeRelative, splitDirectories)
+import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import System.Random.TF (newTFGen)
 import System.Random.TF.Instances (random)
@@ -116,14 +124,12 @@ instance MonadStorage Storage where
 
   getDocumentVersions = listDirectoryIfExists . docDir
 
-  saveVersionContent docid version content = do
-    Storage $ do
-      Handle {dataDir} <- ask
-      let docdir = dataDir </> docDir docid
-      liftIO $ do
-        createDirectoryIfMissing True docdir
-        BSL.writeFile (docdir </> version) content
-    emitDocumentChanged docid
+  saveVersionContent docid version content = Storage $ do
+    Handle {dataDir} <- ask
+    let docdir = dataDir </> docDir docid
+    liftIO $ do
+      createDirectoryIfMissing True docdir
+      BSL.writeFile (docdir </> version) content
 
   loadVersionContent docid version = Storage $ do
     Handle {dataDir} <- ask
@@ -138,52 +144,47 @@ instance MonadStorage Storage where
         `catch` \e ->
           unless (isDoesNotExistError e) $ throwIO e
 
-  changeDocId old new = do
-    renamed <- x
-    when renamed $ emitDocumentChanged new
-    where
-      x = Storage $ do
-        Handle {dataDir} <- ask
-        let oldPath = dataDir </> docDir old
-            newPath = dataDir </> docDir new
-        oldPathCanon <- liftIO $ canonicalizePath oldPath
-        newPathCanon <- liftIO $ canonicalizePath newPath
-        let pathsDiffer = newPathCanon /= oldPathCanon
-        when pathsDiffer $ do
-          newPathExists <- liftIO $ doesPathExist newPath
-          when newPathExists
-            $ throwErrorString
-            $ unwords
-                [ "changeDocId",
-                  show old,
-                  "[",
-                  oldPath,
-                  "->",
-                  oldPathCanon,
-                  "]",
-                  show new,
-                  "[",
-                  newPath,
-                  "->",
-                  newPathCanon,
-                  "]: internal error: new document id is already taken"
-                ]
-          liftIO $ renameDirectory oldPath newPath
-        pure pathsDiffer
+  changeDocId old new = Storage $ do
+    Handle {dataDir} <- ask
+    let oldPath = dataDir </> docDir old
+        newPath = dataDir </> docDir new
+    oldPathCanon <- liftIO $ canonicalizePath oldPath
+    newPathCanon <- liftIO $ canonicalizePath newPath
+    when (newPathCanon /= oldPathCanon) $ do
+      newPathExists <- liftIO $ doesPathExist newPath
+      when newPathExists
+        $ throwErrorString
+        $ unwords
+            [ "changeDocId",
+              show old,
+              "[",
+              oldPath,
+              "->",
+              oldPathCanon,
+              "]",
+              show new,
+              "[",
+              newPath,
+              "->",
+              newPathCanon,
+              "]: internal error: new document id is already taken"
+            ]
+      liftIO $ renameDirectory oldPath newPath
 
 -- | Storage handle (uses the “Handle pattern”).
 data Handle
   = Handle
       { clock :: IORef EpochTime,
         dataDir :: FilePath,
-        replica :: ReplicaId,
-        onDocumentChanged :: TChan (CollectionName, RawDocId)
+        fsWatchManager :: FSNotify.WatchManager,
+        stopWatching :: IORef (Maybe StopListening),
+        onDocumentChanged :: TChan (CollectionName, RawDocId),
+        -- ^ A channel of changes in the database.
+        -- To activate it, call 'startWatching'.
+        -- You should NOT read from it directly,
+        -- call 'subscribe' to read from derived channel instead.
+        replica :: ReplicaId
       }
-
-emitDocumentChanged :: Collection a => DocId a -> Storage ()
-emitDocumentChanged (DocId docid :: DocId a) = Storage $ do
-  Handle {onDocumentChanged} <- ask
-  liftIO . atomically $ writeTChan onDocumentChanged (collectionName @a, docid)
 
 -- | Create new storage handle.
 -- Uses MAC address for replica id or generates a random one.
@@ -197,12 +198,22 @@ newHandle hDataDir = do
   newHandleWithReplicaId hDataDir replicaId
 
 newHandleWithReplicaId :: FilePath -> Word64 -> IO Handle
-newHandleWithReplicaId dataDir replicaId = do
+newHandleWithReplicaId dataDir' replicaId = do
+  dataDir <- makeAbsolute dataDir'
   time <- getCurrentEpochTime
   clock <- newIORef time
-  let replica = applicationSpecific replicaId
+  fsWatchManager <- FSNotify.startManager
+  stopWatching <- newIORef Nothing
   onDocumentChanged <- newBroadcastTChanIO
-  pure Handle {dataDir, clock, replica, onDocumentChanged}
+  let replica = applicationSpecific replicaId
+  pure Handle
+    { clock,
+      dataDir,
+      fsWatchManager,
+      stopWatching,
+      onDocumentChanged,
+      replica
+    }
 
 listDirectoryIfExists :: FilePath -> Storage [FilePath]
 listDirectoryIfExists relpath = Storage $ do
@@ -230,18 +241,50 @@ getMacAddress = do
         + (fromIntegral b1 `shiftL` 8)
         + fromIntegral b0
 
+subscribe :: Handle -> IO (TChan (CollectionName, RawDocId))
+subscribe handle@Handle {onDocumentChanged} = do
+  startWatching handle
+  atomically $ dupTChan onDocumentChanged
+
 {- |
   Watch for changes,
-  calling the action each time a document changes inside a replica or outside.
+  calling the action each time a document changes inside the replica or outside.
 
   This function blocks its thread.
   -}
-watch
+subscribeBlocking
   :: Handle
   -> (CollectionName -> RawDocId -> IO ()) -- ^ action
   -> IO ()
-watch Handle {onDocumentChanged} action = do
-  childChan <- atomically $ dupTChan onDocumentChanged
+subscribeBlocking handle action = do
+  chan <- subscribe handle
   forever $ do
-    (collection, docid) <- atomically $ readTChan childChan
+    (collection, docid) <- atomically $ readTChan chan
     action collection docid
+
+startWatching :: Handle -> IO ()
+startWatching handle = do
+  isWatching <- isJust <$> readIORef stopWatching
+  unless isWatching $ do
+    stopListening <-
+      FSNotify.watchTree
+        fsWatchManager
+        dataDir
+        isStorageEvent
+        translateAnFSChangeToDB
+    writeIORef stopWatching $ Just stopListening
+  where
+    Handle {dataDir, fsWatchManager, stopWatching, onDocumentChanged} = handle
+    isStorageEvent = \case
+      FSNotify.Added _ _ False -> True
+      FSNotify.Modified _ _ False -> True
+      _ -> False
+    translateAnFSChangeToDB event =
+      case splitDirectories $ makeRelative dataDir file of
+        [collection, docid, _version] ->
+          atomically $ writeTChan onDocumentChanged (collection, docid)
+        path ->
+          hPutStrLn stderr
+            $ "translateAnFSChangeToDB: bad path " <> file <> " " <> show path
+      where
+        file = FSNotify.eventPath event

@@ -1,24 +1,45 @@
-cabal-version: >= 1.10
+cabal-version: 2.2
 
 name: demo
 version: 0
 
 build-type: Simple
 
+common language
+    build-depends: base
+    default-language: Haskell2010
+    ghc-options: -threaded
+
 executable demo-text-editor-brick
+    import: language
     build-depends:
-        base,
+        -- global
         brick,
+        text,
+        text-zipper,
+        vty,
+        -- project
         ron,
         ron-rdt,
         ron-storage,
-        text,
-        text-zipper,
-        vty
-    default-language: Haskell2010
-    ghc-options: -threaded
     hs-source-dirs: text-editor-brick
     main-is: Main.hs
     other-modules: Types
 
--- executable demo-text-editor-qt
+executable demo-text-editor-qt
+    import: language
+    build-depends:
+        -- global
+        containers,
+        hoppy-runtime,
+        qtah,
+        stm,
+        -- qtah-qt5,
+        text,
+        time,
+        -- project
+        ron-rdt,
+        ron-storage,
+    ghc-options: -dynamic -rtsopts -with-rtsopts=-N
+    hs-source-dirs: text-editor-qt
+    main-is: Main.hs
