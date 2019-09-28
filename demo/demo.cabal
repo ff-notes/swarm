@@ -43,9 +43,3 @@ executable demo-text-editor-qt
     ghc-options: -dynamic -rtsopts -with-rtsopts=-N
     hs-source-dirs: text-editor-qt
     main-is: Main.hs
-
-executable demo-debug
-    import: language
-    build-depends:
-        fsnotify,
-    main-is: Debug.hs
