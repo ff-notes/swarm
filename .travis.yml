@@ -12,6 +12,7 @@ language: generic
 cache:
   directories:
     - _build
+    - $HOME/.cabal
     - $HOME/.local/bin
     - $HOME/.stack
 
@@ -24,6 +25,14 @@ addons:
       - qt5-default
 
 before_install:
+  - sudo add-apt-repository ppa:hvr/ghc -y
+  - sudo add-apt-repository ppa:hvr/ghcjs -y
+  - sudo apt-get update -q
+  - sudo apt-get install cabal-install-3.0 ghc-8.4.4 ghcjs-8.4 -y
+  - export PATH=/opt/ghcjs/8.4/bin:/opt/ghc/bin:$PATH
+
+  - cabal update
+
   # Download and unpack the stack executable
   - mkdir -p ~/.local/bin
   - export PATH=$HOME/.local/bin:$PATH
@@ -50,6 +59,8 @@ matrix:
     - compiler: GHC 8.4
       env: STACK_YAML="ghc-8.4.yaml"
       install: build_deps
+    - compiler: GHCJS 8.4
+      script: cabal v2-build --ghcjs --with-compiler=ghcjs all
     - name: hlint
       install: $STACK build hlint
       script: $STACK exec -- hlint .
