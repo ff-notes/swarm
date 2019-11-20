@@ -51,19 +51,19 @@ instance ReplicatedAsPayload Opaque49 where
     (opaque_atoms Opaque49)
 
     (struct_lww Struct51
-        int1 Integer
-        str2 RgaString
-        str3 String
-        set4 Alias69
-        nst5 Struct51)
+        (int1 Integer)
+        (str2 RgaString)
+        (str3 String)
+        (set4 Alias69)
+        (nst5 Struct51))
 
     (struct_lww TestFieldPrefix
         #haskell {field_prefix "tfp_"}
-        field Opaque49)
+        (field Opaque49))
 
     (struct_lww TestFieldPrefixAndTitle
         #haskell {field_prefix "tfpat", field_case title}
-        innerField Integer)
+        (innerField Integer))
 
     (enum Enum67 E67Item1 E67Item2)
 

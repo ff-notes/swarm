@@ -73,12 +73,11 @@ data TObject
 
 data StructEncoding = SELww | SESet
 
-data Struct (encoding :: StructEncoding) stage
-  = Struct
-      { name :: Text,
-        fields :: Map Text (Field stage),
-        annotations :: StructAnnotations
-      }
+data Struct (encoding :: StructEncoding) stage = Struct
+  { name :: Text
+  , fields :: Map Text (Field stage)
+  , annotations :: StructAnnotations
+  }
 
 deriving instance
   (Show (UseType stage), Show (XField stage)) => Show (Struct encoding stage)
@@ -103,22 +102,21 @@ defaultStructAnnotations = StructAnnotations
 data CaseTransform = TitleCase
   deriving (Show)
 
-data Field (stage :: Stage)
-  = Field
-      { ronType :: UseType stage,
-        annotations :: FieldAnnotations,
-        ext :: XField stage
-      }
+data Field (stage :: Stage) = Field
+  { mergeStrategy :: MergeStrategy
+    -- ^ Used only for 'StructSet'; for 'StructLww' must be 'LWW'
+  , ronType     :: UseType stage
+  , annotations :: FieldAnnotations
+  , ext         :: XField stage
+  }
 
 deriving instance
   (Show (UseType stage), Show (XField stage)) => Show (Field stage)
 
-newtype FieldAnnotations
-  = FieldAnnotations {mergeStrategy :: Maybe MergeStrategy}
-  deriving (Show)
+data FieldAnnotations = FieldAnnotations deriving (Show)
 
 defaultFieldAnnotations :: FieldAnnotations
-defaultFieldAnnotations = FieldAnnotations {mergeStrategy = Nothing}
+defaultFieldAnnotations = FieldAnnotations
 
 type family XField (stage :: Stage)
 
@@ -140,7 +138,8 @@ data Declaration stage
   | DStructSet (StructSet stage)
 
 deriving instance
-  (Show (UseType stage), Show (XField stage)) => Show (Declaration stage)
+  (Show (StructLww stage), Show (StructSet stage), Show (UseType stage)) =>
+  Show (Declaration stage)
 
 type family Schema (stage :: Stage) where
   Schema 'Parsed = [Declaration 'Parsed]
@@ -168,5 +167,5 @@ data Alias stage = Alias {name :: Text, target :: UseType stage}
 
 deriving instance Show (UseType stage) => Show (Alias stage)
 
-data MergeStrategy = LWW | Max | Min | Set
+data MergeStrategy = LWW | Max | Min | Set | DelegateMonoid
   deriving (Eq, Show)

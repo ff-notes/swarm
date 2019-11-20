@@ -67,9 +67,9 @@ mkGuideType typ = case typ of
     mkOpaque Opaque {name, annotations = OpaqueAnnotations {haskellType}} =
       conT $ mkNameT $ fromMaybe name haskellType
 
-mkFieldType :: RonType -> Maybe MergeStrategy -> TH.TypeQ
+mkFieldType :: RonType -> MergeStrategy -> TH.TypeQ
 mkFieldType typ mergeStrategy = case (typ, mergeStrategy) of
-  (_, Just Set) -> listGuide
+  (_, Set) -> listGuide
   _ -> maybeGuide
   where
     listGuide = [t|[$guide]|]

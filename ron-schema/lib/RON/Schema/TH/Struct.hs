@@ -8,76 +8,52 @@
 {-# LANGUAGE TypeFamilies #-}
 
 {- HLINT ignore "Reduce duplication" -}
-module RON.Schema.TH.Struct
-  ( mkReplicatedStructLww,
-    mkReplicatedStructSet,
-  )
-where
+module RON.Schema.TH.Struct (
+  mkReplicatedStructLww,
+  mkReplicatedStructSet,
+) where
 
-import Data.Char (toTitle)
+import           Data.Char (toTitle)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Language.Haskell.TH
-  ( bindS,
-    conT,
-    doE,
-    listE,
-    newName,
-    noBindS,
-    recC,
-    recConE,
-    recP,
-    sigD,
-    varE,
-    varP,
-    varT,
-  )
+import           Language.Haskell.TH (bindS, conT, doE, listE, newName, noBindS,
+                                      recC, recConE, recP, sigD, varE, varP,
+                                      varT)
 import qualified Language.Haskell.TH as TH
-import Language.Haskell.TH.Syntax (liftData)
-import RON.Data
-  ( MonadObjectState,
-    ObjectStateT,
-    Replicated (encoding),
-    ReplicatedAsObject (Rep, newObject, readObject),
-    getObjectStateChunk,
-    objectEncoding,
-  )
-import RON.Data.LWW (LwwRep)
+import           Language.Haskell.TH.Syntax (liftData)
+
+import           RON.Data (MonadObjectState, ObjectStateT,
+                           Replicated (encoding),
+                           ReplicatedAsObject (Rep, newObject, readObject),
+                           getObjectStateChunk, objectEncoding)
+import           RON.Data.LWW (LwwRep)
 import qualified RON.Data.LWW as LWW
-import RON.Data.ORSet (ORSetRep)
+import           RON.Data.ORSet (ORSetRep)
 import qualified RON.Data.ORSet as ORSet
-import RON.Error (MonadE, errorContext)
-import RON.Event (ReplicaClock)
-import RON.Prelude
-import RON.Schema as X
-import RON.Schema.TH.Common
-  ( fieldExp',
-    fieldPat',
-    liftText,
-    mkFieldType,
-    mkGuideType,
-    mkNameT,
-    newNameT,
-    valDP,
-  )
-import RON.Types (ObjectRef (ObjectRef), UUID)
+import           RON.Error (MonadE, errorContext)
+import           RON.Event (ReplicaClock)
+import           RON.Prelude
+import           RON.Schema as X
+import           RON.Schema.TH.Common (fieldExp', fieldPat', liftText,
+                                       mkFieldType, mkGuideType, mkNameT,
+                                       newNameT, valDP)
+import           RON.Types (ObjectRef (ObjectRef), UUID)
+import           RON.Util (Instance (Instance))
 import qualified RON.UUID as UUID
-import RON.Util (Instance (Instance))
 
 type instance XField Equipped = XFieldEquipped
 
-data XFieldEquipped
-  = XFieldEquipped
-      { haskellName :: Text,
-        ronName :: UUID
-      }
+data XFieldEquipped = XFieldEquipped
+  { haskellName :: Text
+  , ronName :: UUID
+  }
 
 equipStruct :: Struct e Resolved -> Struct e Equipped
-equipStruct Struct {name, fields, annotations} = Struct
-  { name,
-    fields = Map.mapWithKey (equipField annotations) fields,
-    annotations
+equipStruct Struct{name, fields, annotations} = Struct
+  { name
+  , fields = Map.mapWithKey (equipField annotations) fields
+  , annotations
   }
 
 mkReplicatedStructLww :: StructLww Resolved -> TH.DecsQ
@@ -88,7 +64,7 @@ mkReplicatedStructLww structResolved = do
   accessors <- fold <$> traverse (mkAccessorsLww name') fields
   pure $ dataType : instanceReplicated : instanceReplicatedAO : accessors
   where
-    struct@Struct {name, fields} = equipStruct structResolved
+    struct@Struct{name, fields} = equipStruct structResolved
     name' = mkNameT name
     type' = conT name'
 
@@ -100,14 +76,14 @@ mkReplicatedStructSet structResolved = do
   accessors <- fold <$> traverse (mkAccessorsSet name') fields
   pure $ dataType : instanceReplicated : instanceReplicatedAO : accessors
   where
-    struct@Struct {name, fields} = equipStruct structResolved
+    struct@Struct{name, fields} = equipStruct structResolved
     name' = mkNameT name
     type' = conT name'
 
 equipField :: StructAnnotations -> Text -> Field Resolved -> Field Equipped
-equipField structAnnotations schemaName Field {..} =
+equipField structAnnotations schemaName Field{..} =
   case UUID.mkName $ Text.encodeUtf8 schemaName of
-    Just ronName -> Field {ext = XFieldEquipped {haskellName, ronName}, ..}
+    Just ronName -> Field{ext = XFieldEquipped{haskellName, ronName}, ..}
     Nothing ->
       error $ "Field name is not representable in RON: " ++ show schemaName
   where
@@ -119,15 +95,16 @@ varBangType' name =
     . TH.bangType (TH.bang TH.noSourceUnpackedness TH.sourceStrict)
 
 mkDataTypeLww :: StructLww Equipped -> TH.DecQ
-mkDataTypeLww Struct {name, fields} =
+mkDataTypeLww Struct{name, fields} =
   TH.dataD
     (TH.cxt [])
     name'
     []
     Nothing
-    [ recC name'
+    [ recC
+        name'
         [ varBangType' haskellName [t|Maybe $(mkGuideType ronType)|]
-          | Field {ronType, ext = XFieldEquipped {haskellName}} <- toList fields
+        | Field{ronType, ext = XFieldEquipped{haskellName}} <- toList fields
         ]
     ]
     []
@@ -135,17 +112,17 @@ mkDataTypeLww Struct {name, fields} =
     name' = mkNameT name
 
 mkDataTypeSet :: StructSet Equipped -> TH.DecQ
-mkDataTypeSet Struct {name, fields} =
+mkDataTypeSet Struct{name, fields} =
   TH.dataD
     (TH.cxt [])
     name'
     []
     Nothing
-    [ recC name'
+    [ recC
+        name'
         [ varBangType' haskellName (mkFieldType ronType mergeStrategy)
-          | Field {ronType, annotations, ext} <- toList fields,
-            let FieldAnnotations {mergeStrategy} = annotations
-                XFieldEquipped {haskellName} = ext
+        | Field{ronType, mergeStrategy, ext} <- toList fields
+        , let XFieldEquipped{haskellName} = ext
         ]
     ]
     []
@@ -160,37 +137,39 @@ mkInstanceReplicated type' =
     |]
 
 mkInstanceReplicatedAOLww :: StructLww Equipped -> TH.DecsQ
-mkInstanceReplicatedAOLww Struct {name, fields} = do
+mkInstanceReplicatedAOLww Struct{name, fields} = do
   ops <- newName "ops"
   vars <- traverse (newNameT . haskellName . ext) fields
   let packFields =
         listE
           [ [|($ronName', Instance <$> $(varE var))|]
-            | Field {ext = XFieldEquipped {ronName}} <- toList fields,
+            | Field{ext = XFieldEquipped{ronName}} <- toList fields,
               let ronName' = liftData ronName
             | var <- toList vars
           ]
       unpackFields =
         [ bindS (varP var) [|LWW.viewField $ronName' $(varE ops)|]
-          | Field {ext = XFieldEquipped {ronName}} <- toList fields,
+          | Field{ext = XFieldEquipped{ronName}} <- toList fields,
             let ronName' = liftData ronName
           | var <- toList vars
         ]
   let consE =
-        recConE name'
+        recConE
+          name'
           [ fieldExp' haskellName $ varE var
-            | Field {ext = XFieldEquipped {haskellName}} <- toList fields
+            | Field{ext = XFieldEquipped{haskellName}} <- toList fields
             | var <- toList vars
           ]
       consP =
-        recP name'
+        recP
+          name'
           [ fieldPat' haskellName $ varP var
-            | Field {ext = XFieldEquipped {haskellName}} <- toList fields
+            | Field{ext = XFieldEquipped{haskellName}} <- toList fields
             | var <- toList vars
           ]
   let readObjectImpl =
-        doE
-          $ bindS (varP ops) [|getObjectStateChunk|]
+        doE $
+          bindS (varP ops) [|getObjectStateChunk|]
             : unpackFields
             ++ [noBindS [|pure $consE|]]
   [d|
@@ -208,13 +187,13 @@ mkInstanceReplicatedAOLww Struct {name, fields} = do
     errCtx = "readObject @" <> name
 
 mkInstanceReplicatedAOSet :: StructSet Equipped -> TH.DecsQ
-mkInstanceReplicatedAOSet Struct {name, fields} = do
+mkInstanceReplicatedAOSet Struct{name, fields} = do
   ops <- newName "ops"
   vars <- traverse (newNameT . haskellName . ext) fields
   let packFields =
         listE
           [ [|[($ronName', Instance val) | val <- toList $(varE var)]|]
-            | Field {ext = XFieldEquipped {ronName}} <- toList fields,
+            | Field{ext = XFieldEquipped{ronName}} <- toList fields,
               let ronName' = liftData ronName
             | var <- toList vars
           ]
@@ -222,30 +201,31 @@ mkInstanceReplicatedAOSet Struct {name, fields} = do
         [ bindS
             (varP var)
             [|
-              errorContext $(liftText haskellName)
-                $ $(orSetViewField mergeStrategy) $ronName' $(varE ops)
+              errorContext $(liftText haskellName) $
+                $(orSetViewField mergeStrategy) $ronName' $(varE ops)
               |]
-          | Field {annotations = FieldAnnotations {mergeStrategy}, ext} <-
-              toList fields,
-            let XFieldEquipped {haskellName, ronName} = ext
+          | Field{mergeStrategy, ext} <- toList fields,
+            let XFieldEquipped{haskellName, ronName} = ext
                 ronName' = liftData ronName
           | var <- toList vars
         ]
   let consE =
-        recConE name'
+        recConE
+          name'
           [ fieldExp' haskellName $ varE var
-            | Field {ext = XFieldEquipped {haskellName}} <- toList fields
+            | Field{ext = XFieldEquipped{haskellName}} <- toList fields
             | var <- toList vars
           ]
       consP =
-        recP name'
+        recP
+          name'
           [ fieldPat' haskellName $ varP var
-            | Field {ext = XFieldEquipped {haskellName}} <- toList fields
+            | Field{ext = XFieldEquipped{haskellName}} <- toList fields
             | var <- toList vars
           ]
   let readObjectImpl =
-        doE
-          $ bindS (varP ops) [|getObjectStateChunk|]
+        doE $
+          bindS (varP ops) [|getObjectStateChunk|]
             : unpackFields
             ++ [noBindS [|pure $consE|]]
   [d|
@@ -266,8 +246,8 @@ mkHaskellFieldName :: StructAnnotations -> Text -> Text
 mkHaskellFieldName annotations base = prefix <> base'
   where
     StructAnnotations
-      { haskellFieldPrefix = prefix,
-        haskellFieldCaseTransform = caseTransform
+      { haskellFieldPrefix = prefix
+      , haskellFieldCaseTransform = caseTransform
       } =
         annotations
     base' = case caseTransform of
@@ -281,33 +261,36 @@ mkAccessorsLww name' field = do
   a <- varT <$> newName "a"
   m <- varT <$> newName "m"
   let setF =
-        [ sigD set
+        [ sigD
+            set
             [t|
-              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m)
-              => Maybe $guideType
-              -> $m ()
+              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m) =>
+              Maybe $guideType ->
+              $m ()
               |],
           valDP set [|LWW.assignField $ronName'|]
         ]
       readF =
-        [ sigD read
+        [ sigD
+            read
             [t|
               (MonadE $m, MonadObjectState $type' $m) => $m (Maybe $guideType)
               |],
           valDP read [|LWW.readField $ronName'|]
         ]
       zoomF =
-        [ sigD zoom
+        [ sigD
+            zoom
             [t|
-              MonadE $m
-              => ObjectStateT $guideType $m $a
-              -> ObjectStateT $type' $m $a
+              MonadE $m =>
+              ObjectStateT $guideType $m $a ->
+              ObjectStateT $type' $m $a
               |],
           valDP zoom [|LWW.zoomField $ronName'|]
         ]
   sequenceA $ setF ++ readF ++ zoomF
   where
-    Field {ronType, ext = XFieldEquipped {haskellName, ronName}} = field
+    Field{ronType, ext = XFieldEquipped{haskellName, ronName}} = field
     ronName' = liftData ronName
     type' = conT name'
     guideType = mkGuideType ronType
@@ -320,44 +303,51 @@ mkAccessorsSet name' field = do
   a <- varT <$> newName "a"
   m <- varT <$> newName "m"
   let addF =
-        [ sigD add
+        [ sigD
+            add
             [t|
-              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m)
-              => $guideType
-              -> $m ()
+              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m) =>
+              $guideType ->
+              $m ()
               |],
           valDP add [|ORSet.addFieldValue $ronName'|]
         ]
   let setF =
-        [ sigD set
+        [ sigD
+            set
             [t|
-              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m)
-              => $guideType
-              -> $m ()
+              (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m) =>
+              $guideType ->
+              $m ()
               |],
           valDP set [|ORSet.assignField $ronName' . Just|]
         ]
   let clearF =
-        [ sigD clear
+        [ sigD
+            clear
             [t|
               (ReplicaClock $m, MonadE $m, MonadObjectState $type' $m) => $m ()
               |],
-          valDP clear
+          valDP
+            clear
             [|ORSet.assignField $ronName' (Nothing :: Maybe $guideType)|]
         ]
   let getF = do
         TObject _ <- [ronType]
-        [ sigD getName
+        [ sigD
+            getName
             [t|
-              (MonadE $m, MonadObjectState $type' $m)
-              => $m (Maybe (ObjectRef $guideType))
+              (MonadE $m, MonadObjectState $type' $m) =>
+              $m (Maybe (ObjectRef $guideType))
               |],
           valDP getName [|ORSet.getFieldObject $ronName'|]
           ]
   let readF =
-        [ sigD read
+        [ sigD
+            read
             [t|(MonadE $m, MonadObjectState $type' $m) => $m $fieldType|],
-          valDP read
+          valDP
+            read
             [|
               do
                 chunk <- getObjectStateChunk
@@ -365,36 +355,39 @@ mkAccessorsSet name' field = do
               |]
         ]
   let removeF = do
-        guard $ mergeStrategy == Just Set
-        [ sigD remove
+        guard $ mergeStrategy == Set
+        [ sigD
+            remove
             [t|
-              (MonadE $m, MonadObjectState $type' $m, ReplicaClock $m)
-              => $guideType
-              -> $m ()
+              (MonadE $m, MonadObjectState $type' $m, ReplicaClock $m) =>
+              $guideType ->
+              $m ()
               |],
           valDP remove [|ORSet.removeFieldValue $ronName'|],
-          sigD removeIf
+          sigD
+            removeIf
             [t|
-              (MonadE $m, MonadObjectState $type' $m, ReplicaClock $m)
-              => ($guideType -> $m Bool)
-              -> $m ()
+              (MonadE $m, MonadObjectState $type' $m, ReplicaClock $m) =>
+              ($guideType -> $m Bool) ->
+              $m ()
               |],
           valDP removeIf [|ORSet.removeFieldValueIf $ronName'|]
           ]
   let zoomF = do
         TObject _ <- [ronType]
-        [ sigD zoom
+        [ sigD
+            zoom
             [t|
-              (MonadE $m, ReplicaClock $m)
-              => ObjectStateT $guideType $m $a
-              -> ObjectStateT $type' $m $a
+              (MonadE $m, ReplicaClock $m) =>
+              ObjectStateT $guideType $m $a ->
+              ObjectStateT $type' $m $a
               |],
           valDP zoom [|ORSet.zoomFieldObject $ronName'|]
           ]
   sequenceA $ addF ++ setF ++ clearF ++ getF ++ readF ++ removeF ++ zoomF
   where
-    Field {ronType, annotations = FieldAnnotations {mergeStrategy}, ext} = field
-    XFieldEquipped {haskellName, ronName} = ext
+    Field{mergeStrategy, ronType, ext} = field
+    XFieldEquipped{haskellName, ronName} = ext
     ronName' = liftData ronName
     type' = conT name'
     fieldType = mkFieldType ronType mergeStrategy
@@ -408,10 +401,10 @@ mkAccessorsSet name' field = do
     set = mkNameT $ haskellName <> "_set"
     zoom = mkNameT $ haskellName <> "_zoom"
 
-orSetViewField :: Maybe MergeStrategy -> TH.ExpQ
+orSetViewField :: MergeStrategy -> TH.ExpQ
 orSetViewField = varE . \case
-  Nothing -> 'ORSet.viewField
-  Just LWW -> 'ORSet.viewFieldLWW
-  Just Max -> 'ORSet.viewFieldMax
-  Just Min -> 'ORSet.viewFieldMin
-  Just Set -> 'ORSet.viewFieldSet
+  DelegateMonoid -> 'ORSet.viewField
+  LWW -> 'ORSet.viewFieldLWW
+  Max -> 'ORSet.viewFieldMax
+  Min -> 'ORSet.viewFieldMin
+  Set -> 'ORSet.viewFieldSet

@@ -11,8 +11,8 @@ import RON.Storage.FS as Storage
 
 [mkReplicated|
   (struct_set Note
-    active  Bool  #ron{merge LWW}
-    text    RgaString)
+    (active  lww   Bool)
+    (text    merge RgaString))
 |]
 
 instance Collection Note where
@@ -24,8 +24,9 @@ main = do
   h <- Storage.newHandle dataDir
   runStorage h $ do
     obj <-
-      newObjectFrame Note
-        { active = Just True,
-          text = Just $ RGA "Write a task manager"
+      newObjectFrame
+        Note
+          { active = Just True
+          , text = Just $ RGA "Write a task manager"
           }
     createDocument obj
