@@ -1,2 +1,6 @@
 packages:
   ron/ron.cabal
+  ron-rdt/ron-rdt.cabal
+  ron-schema/ron-schema.cabal
+  ron-storage/ron-storage.cabal
+  ron-test/ron-test.cabal
